@@ -1,0 +1,53 @@
+# GUIA DE PUBLICAÇÃO — Grupo All Logística
+# Siga os passos na ordem. Leva cerca de 20 minutos.
+
+## PASSO 1 — Criar banco de dados (Supabase)
+
+1. Acesse: https://supabase.com
+2. Clique "Start your project" → Entre com Google
+3. Clique "New project"
+   - Organization: sua org
+   - Name: grupo-all-logistica
+   - Database Password: crie uma senha forte (anote!)
+   - Region: South America (São Paulo)
+4. Aguarde ~2 minutos criar
+5. Vá em "SQL Editor" (menu esquerdo)
+6. Cole TODO o conteúdo do arquivo "supabase-setup.sql"
+7. Clique "Run"
+8. Vá em "Settings" → "API"
+9. Copie e anote:
+   - Project URL (ex: https://xxxxx.supabase.co)
+   - anon public key (chave longa)
+
+## PASSO 2 — Publicar o código (GitHub)
+
+1. Acesse: https://github.com → Crie conta gratuita
+2. Clique "+" → "New repository"
+   - Name: grupo-all-logistica
+   - Public ou Private (tanto faz)
+   - Clique "Create repository"
+3. Na próxima tela, clique "uploading an existing file"
+4. Arraste TODOS os arquivos desta pasta (exceto node_modules)
+5. Clique "Commit changes"
+
+## PASSO 3 — Publicar o site (Vercel)
+
+1. Acesse: https://vercel.com → Entre com GitHub
+2. Clique "Add New Project"
+3. Selecione o repositório "grupo-all-logistica"
+4. Em "Environment Variables", adicione:
+   - Nome: VITE_SUPABASE_URL  → Valor: (URL do Supabase do passo 1)
+   - Nome: VITE_SUPABASE_ANON_KEY → Valor: (anon key do passo 1)
+5. Clique "Deploy"
+6. Aguarde ~3 minutos
+7. Seu link estará disponível: https://grupo-all-logistica.vercel.app
+
+## RESULTADO
+- Link permanente que funciona em qualquer computador/celular
+- Todos os 50 usuários veem os mesmos dados em tempo real
+- Dados salvos na nuvem (não se perdem se fechar o navegador)
+
+## LOGINS INICIAIS
+- carlos@ops.com / 123456 (Diretor)
+- ana@ops.com / 123456 (Gestor)
+- pedro@ops.com / 123456 (Operador)
