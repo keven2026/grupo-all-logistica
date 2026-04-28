@@ -237,11 +237,12 @@ function notifyUsers(users, subject, body) {
   console.log("[Notif]", subject, "→", users.map(u=>u.email).join(", "));
 }
 const __STORE__ = {};
+const __LOADED__ = {}; // tracks which keys have been loaded from Supabase
 
 function useLS(key, init) {
   const k = `ops3_${key}`;
 
-  // Initialize store entry once
+  // Initialize store entry once from localStorage
   if (__STORE__[k] === undefined) {
     let fromLS = null;
     try { const s = localStorage.getItem(k); fromLS = s ? JSON.parse(s) : null; } catch {}
@@ -252,50 +253,38 @@ function useLS(key, init) {
 
   const set = v => {
     const nv = typeof v === "function" ? v(__STORE__[k]) : v;
-    __STORE__[k] = nv; // update global store FIRST
-    setVal(nv);
+    __STORE__[k] = nv;           // 1. update global store immediately
+    setVal(nv);                  // 2. trigger re-render
+    __LOADED__[k] = true;        // 3. mark as "user has written" — block Supabase overwrite
     try { localStorage.setItem(k, JSON.stringify(nv)); } catch {}
-    // Save to Supabase
+    // 4. save to Supabase (fire and forget)
     const sb = getSupabase();
     if (sb) {
-      window.__localState = window.__localState || {};
-      window.__localState[k] = { ts: Date.now() };
-      sb.from("app_data").upsert({ key: k, value: nv }, { onConflict: "key" })
-        .then(({ error }) => { if (error) console.warn("[useLS] Supabase:", error.message); });
+      sb.from("app_data")
+        .upsert({ key: k, value: nv }, { onConflict: "key" })
+        .then(({ error }) => { if (error) console.warn("[useLS] save error:", error.message); });
     }
   };
 
-  // Load from Supabase once on mount (only if not recently written)
+  // Load from Supabase ONCE on first mount — only if user hasn't written yet
   useEffect(() => {
+    if (__LOADED__[k]) return; // already loaded or user wrote — skip
     const sb = getSupabase();
-    if (!sb) return;
+    if (!sb) { __LOADED__[k] = true; return; }
     sb.from("app_data").select("value").eq("key", k).single()
       .then(({ data }) => {
+        if (__LOADED__[k]) return; // user wrote while we were fetching — discard
         if (data?.value !== undefined && data.value !== null) {
-          const local = window.__localState?.[k];
-          if (local && (Date.now() - local.ts) < 5000) return; // skip if we wrote recently
           __STORE__[k] = data.value;
           setVal(data.value);
           try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
         }
-      });
-
-    // Poll every 30s for multi-user sync
-    const iv = setInterval(() => {
-      const local = window.__localState?.[k];
-      if (local && (Date.now() - local.ts) < 5000) return;
-      sb.from("app_data").select("value").eq("key", k).single()
-        .then(({ data }) => {
-          if (data?.value !== undefined && data.value !== null) {
-            __STORE__[k] = data.value;
-            setVal(data.value);
-            try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
-          }
-        });
-    }, 30000);
-
-    return () => clearInterval(iv);
-  }, [k]);
+        __LOADED__[k] = true;
+      })
+      .catch(() => { __LOADED__[k] = true; });
+    // NO polling — never overwrite local state after initial load
+  // eslint-disable-next-line
+  }, []);
 
   return [val, set];
 }
