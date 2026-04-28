@@ -3618,6 +3618,74 @@ function MotPagBtn({ mot, onPago }) {
   );
 }
 
+function ResumoFinMots({ mots, total }) {
+  const [filtTipo, setFiltTipo] = useState("todos");
+  const lista = filtTipo==="todos" ? mots : mots.filter(c=>(c.tipo||"pacote")===filtTipo);
+  const tDias = lista.reduce((s,c)=>s+(c.diasUnicos||1),0);
+  const tCTEs = lista.reduce((s,c)=>s+(c.totalCTEs||0),0);
+  const tGanho = lista.reduce((s,c)=>s+(c.totalBruto||0),0);
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">📊 Resumo Financeiro por Motorista</p>
+        <div className="flex gap-1">
+          {[["todos","Todos"],["diaria","Diária"],["pacote","CTE"],["ambos","Ambos"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setFiltTipo(v)}
+              className={`text-xs px-2 py-1 rounded border font-medium transition-all ${filtTipo===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-slate-700 text-slate-400">
+              {["Motorista","Dias","CTEs entregues","Média/Dia","Valor Ganho","Valor/CTE","Tipo"].map(h=>(
+                <th key={h} className={`py-2 px-2 font-semibold ${h==="Motorista"?"text-left":"text-right"}`}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map(c => {
+              const dias=c.diasUnicos||1; const ent=c.totalCTEs||0;
+              const mediaDia=dias>0?(ent/dias):0; const ganho=c.totalBruto||0;
+              const mediaCTE=ent>0?(ganho/ent):0; const tipo=c.tipo||"pacote";
+              const isDiaria=tipo==="diaria"||tipo==="ambos"||tipo==="diaria_excedente";
+              return (
+                <tr key={c.id} className={`border-b border-slate-800 hover:bg-slate-800/40 ${isDiaria?"bg-amber-500/5":""}`}>
+                  <td className="py-2 px-2 font-semibold text-slate-100">{isDiaria&&<span className="text-amber-400 mr-1">⭐</span>}{c.nome}</td>
+                  <td className="py-2 px-2 text-right text-amber-400 font-bold">{dias}</td>
+                  <td className="py-2 px-2 text-right text-emerald-400 font-semibold">{ent.toLocaleString("pt-BR")}</td>
+                  <td className="py-2 px-2 text-right">
+                    <span className={`font-semibold ${mediaDia>=20?"text-emerald-400":mediaDia>=10?"text-amber-400":"text-red-400"}`}>{mediaDia.toFixed(1)}</span>
+                  </td>
+                  <td className="py-2 px-2 text-right text-emerald-400 font-bold">{fmt(ganho)}</td>
+                  <td className="py-2 px-2 text-right text-slate-300 font-semibold">{mediaCTE>0?fmt(mediaCTE):"—"}</td>
+                  <td className="py-2 px-2 text-right">
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${tipo==="diaria"?"bg-amber-500/20 text-amber-400":tipo==="ambos"||tipo==="diaria_excedente"?"bg-blue-500/20 text-blue-400":"bg-emerald-500/20 text-emerald-400"}`}>
+                      {tipo==="diaria"?"Diária":tipo==="ambos"?"Diária+CTE":tipo==="diaria_excedente"?"Diária+Exc.":"CTE"}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-700/30 font-bold border-t-2 border-slate-600">
+              <td className="py-2.5 px-2 text-slate-200">TOTAL ({lista.length})</td>
+              <td className="py-2.5 px-2 text-right text-amber-400">{tDias}</td>
+              <td className="py-2.5 px-2 text-right text-emerald-400">{tCTEs.toLocaleString("pt-BR")}</td>
+              <td className="py-2.5 px-2 text-right text-blue-400">{tDias>0?(tCTEs/tDias).toFixed(1):"—"}</td>
+              <td className="py-2.5 px-2 text-right text-emerald-400">{fmt(tGanho)}</td>
+              <td className="py-2.5 px-2 text-right text-slate-300">{tCTEs>0?fmt(tGanho/tCTEs):"—"}</td>
+              <td className="py-2.5 px-2"/>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) {  const [tab, setTab] = useState("resumo");
   const [showCorr, setShowCorr] = useState(null);
   const [rejectTxt, setRejectTxt] = useState("");
@@ -3789,7 +3857,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
               <p className="text-xs font-bold text-slate-400 mb-3">Breakdown do pagamento</p>
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between"><span className="text-slate-300">Diárias</span><span className="text-amber-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+c.vDiaria,0))}</span></div>
-                <div className="flex justify-between"><span className="text-slate-300">Pacotes entregues</span><span className="text-emerald-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+c.vPacotes,0))}</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">CTEs entregues</span><span className="text-emerald-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+(c.vCTEs||c.vPacotes||0),0))}</span></div>
                 <div className="flex justify-between"><span className="text-slate-300">Correções manuais</span><span className="text-blue-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+(c.totalBruto-c.subtotal),0))}</span></div>
                 <div className="flex justify-between border-t border-slate-700 pt-1.5 font-bold"><span className="text-slate-100">Total</span><span className="text-emerald-400">{fmt(total)}</span></div>
               </div>
@@ -3804,6 +3872,10 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
               ))}
             </Card>
           </div>
+
+          {/* ── Resumo Financeiro por Motorista ── */}
+          <ResumoFinMots mots={fec.mots||[]} total={total} />
+
           {fec.nok?.length > 0 && (
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
               <p className="text-xs font-semibold text-amber-400 mb-1">⚠ Sem cadastro ({fec.nok.length}):</p>
