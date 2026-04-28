@@ -342,21 +342,20 @@ const Modal = ({ title, onClose, children, wide=false }) => (
     </div>
   </div>
 );
-const KpiCard = ({ label, value, sub, icon:Icon, color="#DC1426" }) => (
-  <Card className="p-5">
-    <div className="flex items-start justify-between gap-4">
+const KpiCard = ({ label, value, sub, icon:Icon, color="#DC1426", compact }) => (
+  <Card className={compact ? "p-3" : "p-5"}>
+    <div className="flex items-center justify-between gap-2">
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-slate-400 font-medium mb-1 uppercase tracking-wider">{label}</p>
-        <p className="text-3xl font-bold text-slate-100 leading-tight">{value}</p>
-        {sub && <p className="text-xs mt-1.5" style={{color}}>{sub}</p>}
+        <p className={`text-slate-400 font-medium uppercase tracking-wider ${compact?"text-xs mb-0.5":"text-xs mb-1"}`}>{label}</p>
+        <p className={`font-bold text-slate-100 leading-tight ${compact?"text-lg":"text-3xl"}`}>{value}</p>
+        {sub && <p className={compact?"text-xs mt-0.5":"text-xs mt-1.5"} style={{color}}>{sub}</p>}
       </div>
-      <div className="flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg"
+      <div className={`flex-shrink-0 rounded-xl flex items-center justify-center shadow ${compact?"w-8 h-8 rounded-lg":"w-12 h-12 rounded-2xl"}`}
         style={{background:`linear-gradient(135deg, ${color}30 0%, ${color}15 100%)`, border:`1px solid ${color}35`}}>
-        <Icon size={24} style={{color}}/>
+        <Icon size={compact?16:24} style={{color}}/>
       </div>
     </div>
-    {/* Colored bottom accent bar */}
-    <div className="mt-4 h-0.5 rounded-full" style={{background:`linear-gradient(90deg, ${color}60, transparent)`}}/>
+    <div className={compact?"mt-2 h-0.5 rounded-full":"mt-4 h-0.5 rounded-full"} style={{background:`linear-gradient(90deg, ${color}60, transparent)`}}/>
   </Card>
 );
 
@@ -1648,7 +1647,17 @@ function RevenueView({ user, acrescimos, setAcrescimos, clients, faturamentosJad
 
   // Fat. Jadlog — agrupar por cliente/quinzena
   const jadlogRows = (faturamentosJadlog||[]).flatMap(b=>b.rows).filter(r=>r.mes===filterMonth&&r.ano===filterYear);
-  const matchClient = cnpj => clients.find(c=>(c.cnpj||"").replace(/\D/g,"").replace(/^0+/,"")===cnpj.replace(/^0+/,""));
+  const normCnpj = s => String(s||"").replace(/\D/g,"").replace(/^0+/,"");
+  const matchClient = cnpj => {
+    const nc = normCnpj(cnpj);
+    return clients.find(c => {
+      // Support both single cnpj and cnpjs array
+      const lista = Array.isArray(c.cnpjs) && c.cnpjs.length > 0
+        ? c.cnpjs
+        : (c.cnpj ? [c.cnpj] : []);
+      return lista.some(x => normCnpj(x) === nc);
+    });
+  };
   const jadlogByClient = {};
   jadlogRows.forEach(r=>{
     const cl = matchClient(r.cnpj);
@@ -1784,7 +1793,7 @@ function AcrescimoForm({ clients, onSave, onCancel, defaultMonth, defaultYear })
 // ─────────────────────────────────────────────
 // PROFITABILITY — includes task costs
 // ─────────────────────────────────────────────
-function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, faturamentosJadlog }) {
+function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, faturamentosJadlog, acrescimos, forecastEntries }) {
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth()+1);
   const [filterYear,  setFilterYear]  = useState(new Date().getFullYear());
   const [revenueSource, setRevenueSource] = useState("jadlog"); // "jadlog" | "manual"
@@ -1810,9 +1819,14 @@ function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, 
       const al=t.clientAllocation.find(x=>x.clientId===cl.id);
       return a+(al?cr.value*al.percent/100:0);
     },0),0);
-    const totalCost=fc+vc+tc; const profit=rev-totalCost;
-    const margin=rev>0?(profit/rev*100):0;
-    return {...cl,rev,fc,vc,tc,totalCost,profit,margin};
+    // buscar % imposto do forecast entry
+    const fEntry = (forecastEntries||[]).find(f=>f.clientId===cl.id&&f.month===filterMonth&&f.year===filterYear);
+    const impostoPerc = fEntry?.impostoPercent || 0;
+    const totalCost = fc+vc+tc;
+    const imposto   = rev * (impostoPerc/100);            // imposto sobre comissão
+    const profit    = rev - totalCost - imposto;          // saldo = comissão - custos - impostos
+    const margin    = rev>0?(profit/rev*100):0;
+    return {...cl,rev,fc,vc,tc,totalCost,imposto,profit,margin};
   // eslint-disable-next-line
   }),[clients,fixedCosts,costEntries,revenues,tasks,filterMonth,filterYear,revenueSource,faturamentosJadlog]);
 
@@ -2271,20 +2285,30 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
       {tab==="clients"&&(
         <div className="space-y-3">
           <div className="flex justify-end"><Btn size="sm" onClick={()=>setShowNewClient(true)}><Plus size={14}/>Novo Cliente</Btn></div>
-          {clients.map(cl=>(
+          {clients.map(cl=>{
+            const cList = Array.isArray(cl.cnpjs)&&cl.cnpjs.length>0 ? cl.cnpjs : (cl.cnpj?[cl.cnpj]:[]);
+            return (
             <Card key={cl.id} className="p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center font-bold text-blue-400 text-xs">{cl.code}</div>
-                  <p className="text-sm font-semibold text-slate-100">{cl.name}</p>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{cl.name}</p>
+                    {cList.length>0&&(
+                      <div className="flex gap-1 flex-wrap mt-0.5">
+                        {cList.map(c=><span key={c} className="text-xs text-blue-400/70 font-mono">{c}</span>)}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge color={cl.active?"#10b981":"#64748b"}>{cl.active?"Ativo":"Inativo"}</Badge>
-                  <button onClick={()=>toggleClient(cl.id)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-400 hover:border-slate-400 ml-1">{cl.active?"Desativar":"Ativar"}</button>
+                  <button onClick={()=>toggleClient(cl.id)} className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-400 hover:border-slate-400">{cl.active?"Desativar":"Ativar"}</button>
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -2355,14 +2379,36 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
 }
 
 function ClientForm({ onSave, onCancel }) {
-  const [name,setName]=useState(""); const [code,setCode]=useState(""); const [cnpj,setCnpj]=useState("");
+  const [name,setName]=useState(""); const [code,setCode]=useState("");
+  const [cnpjInput, setCnpjInput] = useState("");
+  const [cnpjs, setCnpjs] = useState([]);
+  const addCnpj = () => { const v=cnpjInput.trim(); if(!v||cnpjs.includes(v)) return; setCnpjs(p=>[...p,v]); setCnpjInput(""); };
+  const removeCnpj = c => setCnpjs(p=>p.filter(x=>x!==c));
   return (
     <div className="space-y-4">
       <Input label="Nome" placeholder="Nome completo do cliente" value={name} onChange={e=>setName(e.target.value)}/>
       <Input label="Sigla / Código" placeholder="Ex: MAG" value={code} onChange={e=>setCode(e.target.value.toUpperCase())}/>
-      <Input label="CNPJ (para casar com Faturamento Jadlog)" placeholder="00.000.000/0001-00" value={cnpj} onChange={e=>setCnpj(e.target.value)}/>
-      <div className="flex gap-2">
-        <Btn onClick={()=>name&&code&&onSave({name,code,cnpj})} disabled={!name||!code} className="flex-1 justify-center">Salvar</Btn>
+      <div>
+        <label className="text-xs text-slate-400 font-medium block mb-1">CNPJs (para casar com Fat. Jadlog)</label>
+        <div className="flex gap-2">
+          <input value={cnpjInput} onChange={e=>setCnpjInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCnpj()}
+            placeholder="00.000.000/0001-00 + Enter"
+            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+          <Btn size="sm" onClick={addCnpj} disabled={!cnpjInput.trim()}><Plus size={13}/>Add</Btn>
+        </div>
+        {cnpjs.length>0&&(
+          <div className="flex gap-2 flex-wrap mt-2">
+            {cnpjs.map(c=>(
+              <span key={c} className="flex items-center gap-1 text-xs bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-full px-2.5 py-1">
+                {c}<button onClick={()=>removeCnpj(c)} className="hover:text-red-400 ml-1"><XIcon size={11}/></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-slate-500 mt-1">Vários CNPJs do mesmo cliente são agrupados automaticamente</p>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Btn onClick={()=>name&&code&&onSave({name,code,cnpjs,cnpj:cnpjs[0]||""})} disabled={!name||!code} className="flex-1 justify-center">Salvar</Btn>
         <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
       </div>
     </div>
@@ -2423,22 +2469,25 @@ function NewUserModal({ areas, onClose, onSave }) {
 // ─────────────────────────────────────────────
 const FC_YEAR = 2025;
 const fcGetEntry  = (entries, clientId, month) => entries.find(f => f.clientId===clientId && f.month===month && f.year===FC_YEAR) || null;
-const fcCalcFat   = e => (e?.volumetria||0)*(e?.ticketMedio||0);
+const fcCalcFat   = e => (e?.volumetria||0)*(e?.ticketMedio||0);           // faturamento bruto (só informativo)
 const fcCalcCLT   = e => (e?.maoObraCLTBase||0)*1.7;
 const fcCalcCost  = e => (e?.fretePrevisto||0)+(e?.maoObraTercPrevisto||0)+fcCalcCLT(e)+(e?.cgcPrevisto||0);
-const fcCalcCom   = e => fcCalcFat(e)*((e?.comissaoPercent||0)/100);
-const fcCalcImp   = e => fcCalcFat(e)*((e?.impostoPercent||0)/100);
-const fcCalcSaldo = e => fcCalcFat(e)-fcCalcCost(e)-fcCalcCom(e)-fcCalcImp(e);
+const fcCalcCom   = e => fcCalcFat(e)*((e?.comissaoPercent||0)/100);        // comissão = BASE de tudo
+const fcCalcImp   = e => fcCalcCom(e)*((e?.impostoPercent||0)/100);         // imposto SOBRE comissão
+const fcCalcSaldo = e => fcCalcCom(e)-fcCalcCost(e)-fcCalcImp(e);          // saldo = comissão - custos - impostos
 // Fat. Jadlog comissão real por cliente/mês (usa CNPJ do cliente)
 const fcGetFatReal = (revenues, clientId, month, faturamentosJadlog, clients, acrescimos) => {
   // From Jadlog
   const cl = (clients||[]).find(c=>c.id===clientId);
   let jadlogTotal = 0;
-  if (cl?.cnpj && faturamentosJadlog?.length) {
-    const cnpj = cl.cnpj.replace(/\D/g,"").replace(/^0+/,"");
+  const clLista = Array.isArray(cl?.cnpjs) && cl.cnpjs.length > 0
+    ? cl.cnpjs
+    : (cl?.cnpj ? [cl.cnpj] : []);
+  if (clLista.length > 0 && faturamentosJadlog?.length) {
+    const cnpjs = clLista.map(x => String(x).replace(/\D/g,"").replace(/^0+/,""));
     jadlogTotal = faturamentosJadlog.flatMap(b=>b.rows).filter(r=>{
       if (r.mes !== month || r.ano !== FC_YEAR) return false;
-      return r.cnpj.replace(/^0+/,"") === cnpj;
+      return cnpjs.includes(r.cnpj.replace(/^0+/,""));
     }).reduce((s,r)=>s+r.comissao, 0);
   }
   // Plus manual acrescimos (positive adjustments)
@@ -2623,36 +2672,35 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
     const volReal = e?.volumetriaRealizada;
     const vol = volReal != null ? volReal : (e?.volumetria||0);
     const volSrc = volReal != null ? "real" : "prev";
-    const custos = fcCalcCost(e);
-    const imposto = fat * ((e?.impostoPercent||0)/100);
-    const comissao = fat * ((e?.comissaoPercent||0)/100);
-    const saldo = fat - custos - imposto - comissao;
-    return { cl, e, fat, fatSrc, fatPrev, desvio, vol, volSrc, custos, imposto, comissao, saldo };
+    const custos   = fcCalcCost(e);
+    const imposto  = fat * ((e?.impostoPercent||0)/100);   // imposto sobre comissão realizada
+    const saldo    = fat - custos - imposto;               // saldo = comissão - custos - impostos
+    return { cl, e, fat, fatSrc, fatPrev, desvio, vol, volSrc, custos, imposto, saldo };
   });
-  const totals = rows.reduce((a,r) => ({ fat:a.fat+r.fat, fatPrev:a.fatPrev+r.fatPrev, custos:a.custos+r.custos, imposto:a.imposto+r.imposto, comissao:a.comissao+r.comissao, saldo:a.saldo+r.saldo }), { fat:0, fatPrev:0, custos:0, imposto:0, comissao:0, saldo:0 });
+  const totals = rows.reduce((a,r) => ({ fat:a.fat+r.fat, fatPrev:a.fatPrev+r.fatPrev, custos:a.custos+r.custos, imposto:a.imposto+r.imposto, saldo:a.saldo+r.saldo }), { fat:0, fatPrev:0, custos:0, imposto:0, saldo:0 });
   const SrcBadge = ({ src }) => <span className={`text-xs ml-1 font-bold ${src==="real"?"text-emerald-400":"text-amber-400/70"}`}>{src==="real"?"R":"P"}</span>;
   return (
     <div className="space-y-5">
       <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-2 text-xs text-emerald-300">
         ✅ <strong>Realizado</strong> = Comissão Fat. Jadlog + Acréscimos avulsos. <span className="text-emerald-400 font-bold">R</span> = Realizado &nbsp;·&nbsp; <span className="text-amber-400/70 font-bold">P</span> = Previsto
       </div>
-      <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-        <KpiCard label="Realizado" value={fmt(totals.fat)} icon={Wallet} color="#10b981"/>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="Comissão Real" value={fmt(totals.fat)} icon={Wallet} color="#10b981"/>
         <KpiCard label="Previsto" value={fmt(totals.fatPrev)} icon={BarChart2} color="#f59e0b"/>
         <KpiCard label="Custos" value={fmt(totals.custos)} icon={DollarSign} color="#ef4444"/>
-        <KpiCard label="Impostos" value={fmt(totals.imposto)} icon={FileText} color="#8b5cf6"/>
+        <KpiCard label="Impostos (s/com.)" value={fmt(totals.imposto)} icon={FileText} color="#8b5cf6"/>
         <KpiCard label="Saldo" value={fmt(totals.saldo)} icon={TrendingUp} color={totals.saldo>=0?"#10b981":"#ef4444"}/>
       </div>
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-700">
-              {["Cliente","Volume","Realizado","Previsto","Desvio","Custos","Imposto","Comissão","Saldo","Observação"].map(h=>(
+              {["Cliente","Volume","Comissão Real","Previsto","Desvio","Custos","Imposto (s/com.)","Saldo","Observação"].map(h=>(
                 <th key={h} className="text-left text-xs font-semibold text-slate-400 px-4 py-3 whitespace-nowrap">{h}</th>
               ))}
             </tr></thead>
             <tbody>
-              {rows.map(({cl,e,fat,fatSrc,fatPrev,desvio,vol,volSrc,custos,imposto,comissao,saldo})=>(
+              {rows.map(({cl,e,fat,fatSrc,fatPrev,desvio,vol,volSrc,custos,imposto,saldo})=>(
                 <tr key={cl.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 align-top">
                   <td className="px-4 py-3 font-semibold text-slate-100 whitespace-nowrap">{cl.name}</td>
                   <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{vol.toLocaleString("pt-BR")}<SrcBadge src={volSrc}/></td>
@@ -2663,7 +2711,6 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
                   </td>
                   <td className="px-4 py-3 text-red-400 whitespace-nowrap">{fmt(custos)}</td>
                   <td className="px-4 py-3 text-purple-400 whitespace-nowrap">{fmt(imposto)}</td>
-                  <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{fmt(comissao)}</td>
                   <td className={`px-4 py-3 font-bold whitespace-nowrap ${saldo>=0?"text-emerald-400":"text-red-400"}`}>{fmt(saldo)}</td>
                   <td className="px-4 py-3 min-w-[200px]">
                     <input defaultValue={e?.observacao||""} key={`obs-${cl.id}-${filterMonth}`}
@@ -2683,7 +2730,6 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
               </td>
               <td className="px-4 py-3 text-red-400 font-bold">{fmt(totals.custos)}</td>
               <td className="px-4 py-3 text-purple-400 font-bold">{fmt(totals.imposto)}</td>
-              <td className="px-4 py-3 text-amber-400 font-bold">{fmt(totals.comissao)}</td>
               <td className={`px-4 py-3 font-bold text-lg ${totals.saldo>=0?"text-emerald-400":"text-red-400"}`}>{fmt(totals.saldo)}</td>
               <td className="px-4 py-3"/>
             </tr></tfoot>
@@ -4078,6 +4124,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
   const [subView, setSubView] = useState("lista");
   const [showNovo, setShowNovo] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+  const [confirmDeleteFec, setConfirmDeleteFec] = useState(null);
 
   // Filters
   const [fStatus, setFStatus]     = useState("");
@@ -4138,6 +4185,31 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
 
   return (
     <div className="p-6 space-y-5">
+      {/* Delete fechamento confirm modal */}
+      {confirmDeleteFec && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setConfirmDeleteFec(null)}>
+          <div className="bg-slate-800 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm space-y-4 mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0"><Trash2 size={18} className="text-red-400"/></div>
+              <div>
+                <p className="text-sm font-bold text-slate-100">Excluir fechamento?</p>
+                <p className="text-xs text-slate-400 mt-0.5">{confirmDeleteFec.descricao}</p>
+                <p className="text-xs text-red-400 mt-1">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setFechamentos(p => p.filter(f => f.id !== confirmDeleteFec.id)); setConfirmDeleteFec(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors">
+                Sim, excluir
+              </button>
+              <button onClick={() => setConfirmDeleteFec(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-100">Fechamento de Entregas</h1>
@@ -4253,6 +4325,13 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <span className="text-xs text-amber-400 opacity-0 group-hover:opacity-100 font-semibold">Abrir →</span>
                       <p className="text-lg font-bold text-emerald-400">{fmt(total)}</p>
+                      {user.role !== "auditor" && (
+                        <button onClick={e => { e.stopPropagation(); setConfirmDeleteFec(f); }}
+                          className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 p-1 transition-all mt-1"
+                          title="Excluir fechamento">
+                          <Trash2 size={13}/>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5367,7 +5446,16 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
   });
 
   // Match CNPJ → client
-  const matchClient = cnpj => clients.find(c => (c.cnpj||"").replace(/\D/g,"").replace(/^0+/,"") === cnpj.replace(/^0+/,""));
+  const normCnpj = s => String(s||"").replace(/\D/g,"").replace(/^0+/,"");
+  const matchClient = cnpj => {
+    const nc = normCnpj(cnpj);
+    return clients.find(c => {
+      const lista = Array.isArray(c.cnpjs) && c.cnpjs.length > 0
+        ? c.cnpjs
+        : (c.cnpj ? [c.cnpj] : []);
+      return lista.some(x => normCnpj(x) === nc);
+    });
+  };
 
   // KPIs
   const totalFat   = filteredRows.reduce((s,r)=>s+r.fatBruto,0);
@@ -5447,11 +5535,11 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
       {tab==="dashboard"&&(
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <KpiCard label="CTEs" value={totalCTEs.toLocaleString("pt-BR")} icon={BarChart2} color="#60a5fa"/>
-            <KpiCard label="Faturamento" value={fmt(totalFat)} sub="zFrapConrrent" icon={Wallet} color="#10b981"/>
-            <KpiCard label="Comissão" value={fmt(totalCom)} sub="Liquido" icon={DollarSign} color="#f59e0b"/>
-            <KpiCard label="Margem" value={`${margem.toFixed(1)}%`} sub="Comissão/Fat" icon={TrendingUp} color={margem>10?"#10b981":"#ef4444"}/>
-            <KpiCard label="Frete Médio/CTE" value={fmt(freteMedio)} sub="Fat÷CTEs" icon={Truck} color="#8b5cf6"/>
+            <KpiCard compact label="CTEs" value={totalCTEs.toLocaleString("pt-BR")} icon={BarChart2} color="#60a5fa"/>
+            <KpiCard compact label="Faturamento" value={fmt(totalFat)} sub="zFrapConrrent" icon={Wallet} color="#10b981"/>
+            <KpiCard compact label="Comissão" value={fmt(totalCom)} sub="Liquido" icon={DollarSign} color="#f59e0b"/>
+            <KpiCard compact label="Margem" value={`${margem.toFixed(1)}%`} sub="Comissão/Fat" icon={TrendingUp} color={margem>10?"#10b981":"#ef4444"}/>
+            <KpiCard compact label="Frete Médio/CTE" value={fmt(freteMedio)} sub="Fat÷CTEs" icon={Truck} color="#8b5cf6"/>
           </div>
           {/* Bar chart por período */}
           {Object.keys(byPeriod).length>0&&(
@@ -5851,7 +5939,7 @@ export default function OpsControl() {
         {view==="tasks"&&<TasksView user={liveUser} tasks={tasks} setTasks={setTasks} templates={templates} setTemplates={setTemplates} clients={clients} areas={areas} users={users} initialOpenId={openTaskId} onClearOpenId={()=>setOpenTaskId(null)}/>}
         {view==="costs"&&hasF&&<CostsView user={liveUser} fixedCosts={fixedCosts} setFixedCosts={setFixedCosts} costEntries={costEntries} setCostEntries={setCostEntries} clients={clients}/>}
         {view==="revenue"&&hasF&&<RevenueView user={liveUser} acrescimos={acrescimos} setAcrescimos={setAcrescimos} clients={clients} faturamentosJadlog={faturamentosJadlog}/>}
-        {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
+        {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos} forecastEntries={forecastEntries}/>}
         {view==="forecast"&&hasF&&<ForecastView clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
         {view==="fechamento"&&<FechamentoView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} motoristas={motoristas} setMotoristas={setMotoristas}/>}
         {view==="fatjadlog"&&hasF&&<FatJadlogView user={liveUser} faturamentos={faturamentosJadlog} setFaturamentos={setFaturamentosJadlog} unidades={unidades} setUnidades={setUnidades} clients={clients}/>}
