@@ -5,7 +5,7 @@ import {
   AlertCircle, MessageSquare, Building2, Calendar, Wallet, FileText,
   User, Shield, Eye, ArrowLeft, Edit2, Trash2, Activity,
   Lock, Layers, BarChart2, Paperclip, Image, Upload, RefreshCw, ChevronDown,
-  Truck, CreditCard, Send, ExternalLink, Hash, Copy
+  Truck, CreditCard, Send, ExternalLink, Hash, Copy, Search, Download
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -368,13 +368,31 @@ const userHasFechamento = u => u.role === "director" || u.fechamentoAccess === t
 const userAreaIds = u => u.areaIds || [];
 const userCanSeeTask = (u, task, templates) => {
   if (u.role === "director" || u.role === "auditor") return true;
-  if (task.openedBy === u.id) return true;
+  if (task.openedBy === u.id) return true;  // sempre vê o que abriu
+
+  const tpl = templates.find(t => t.id === task.templateId);
+  if (!tpl) return false;
+  const uAreas = userAreaIds(u);
+
+  const curStep = tpl.steps[task.currentStepIndex];
+
+  // Etapa atual designada diretamente a este usuário
+  const assignedToMeNow = curStep?.assigneeUserId === u.id;
+  if (assignedToMeNow) return true;
+
+  // Etapa atual pertence à área deste usuário
+  const curStepMyArea = curStep?.areaId && uAreas.includes(curStep.areaId);
+  if (curStepMyArea) return true;
+
+  // Gestor de área: também vê se QUALQUER etapa futura/passada é da sua área
+  // (para acompanhamento do fluxo inteiro)
   if (u.role === "area_manager") {
-    const uAreas = userAreaIds(u);
-    const tpl = templates.find(t => t.id === task.templateId);
-    if (tpl && tpl.steps.some(s => s.areaId && uAreas.includes(s.areaId))) return true;
-    if (task.clientAllocation && uAreas.length > 0) return false;
+    const hasAreaStep = tpl.steps.some(s => s.areaId && uAreas.includes(s.areaId));
+    if (hasAreaStep) return true;
+    // Ou se qualquer etapa foi designada a ele
+    if (tpl.steps.some(s => s.assigneeUserId === u.id)) return true;
   }
+
   return false;
 };
 const userCanSeeTemplate = (u, tpl) => {
@@ -602,23 +620,35 @@ function TaskTrackingDashboard({ user, tasks, templates, clients, areas, setView
             {!isTerminal&&tpl.steps[task.currentStepIndex]&&(
               <div className="mt-4 pt-3 border-t border-slate-700 text-xs text-slate-400">
                 <span className="text-amber-400 font-semibold">Atual: </span>{tpl.steps[task.currentStepIndex].name}
-                {tpl.steps[task.currentStepIndex].slaDays&&(
-                  <span className="text-blue-400 ml-2">⏱ SLA: {tpl.steps[task.currentStepIndex].slaDays} dia(s)</span>
-                )}
-                {task.stepStatuses[task.currentStepIndex]?.slaOverdue&&(
-                  <span className="text-red-400 font-bold ml-2">⚠ SLA ULTRAPASSADO</span>
-                )}
+                {tpl.steps[task.currentStepIndex].slaDays&&(()=>{
+                  const slaDias = Number(tpl.steps[task.currentStepIndex].slaDays);
+                  const ss = task.stepStatuses[task.currentStepIndex];
+                  if (!ss?.startedAt) return <span className="text-blue-400 ml-2">⏱ SLA: {slaDias}d úteis</span>;
+                  // Recalc dias uteis passed
+                  const FERIADOS = new Set(["01/01","21/04","01/05","07/09","12/10","02/11","15/11","25/12"]);
+                  const isFer = d => { const s=`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`; return FERIADOS.has(s); };
+                  const cur2 = new Date(ss.startedAt); cur2.setDate(cur2.getDate()+1); cur2.setHours(0,0,0,0);
+                  const end2 = new Date(); end2.setHours(0,0,0,0);
+                  let passed = 0;
+                  const tmp = new Date(cur2);
+                  while(tmp<=end2){const d=tmp.getDay();if(d!==0&&d!==6&&!isFer(tmp))passed++;tmp.setDate(tmp.getDate()+1);}
+                  const restantes = slaDias - passed;
+                  if (ss.slaOverdue || restantes < 0) return <span className="text-red-400 font-bold ml-2">⚠ SLA: {Math.abs(restantes)}d úteis atrasado</span>;
+                  if (restantes === 0) return <span className="text-orange-400 font-bold ml-2">⏱ SLA: vence hoje</span>;
+                  if (restantes <= 1) return <span className="text-orange-400 font-semibold ml-2">⏱ SLA: {restantes}d útil restante</span>;
+                  return <span className="text-blue-400 ml-2">⏱ SLA: {restantes}/{slaDias}d úteis restantes</span>;
+                })()}
                 {task.stepStatuses[task.currentStepIndex]?.slaEscalado&&(
                   <span className="text-orange-400 font-bold ml-2">📢 Escalado para {task.stepStatuses[task.currentStepIndex].slaAcaoTipo==="escalar_diretor"?"Diretor":"Gestor"}</span>
                 )}
                 {tpl.steps[task.currentStepIndex].slaAcao==="auto_aprovar"&&!task.stepStatuses[task.currentStepIndex]?.slaOverdue&&tpl.steps[task.currentStepIndex].slaDays&&(
-                  <span className="text-amber-400/60 ml-2">· auto-aprova em {tpl.steps[task.currentStepIndex].slaDays}d se sem ação</span>
+                  <span className="text-amber-400/60 ml-2">· auto-aprova se sem ação</span>
                 )}
                 {tpl.steps[task.currentStepIndex].requiresApproval&&(
                   <span className="text-slate-500"> · aprovação de {tpl.steps[task.currentStepIndex].approverRole==="director"?"Diretor":"Gestor de Área"}</span>
                 )}
-          </div>
-        )}
+              </div>
+            )}
       </div>
     );
   };
@@ -1019,7 +1049,8 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
   const [selectedId, setSelectedId] = useState(initialOpenId||null);
   const [showNew, setShowNew] = useState(false);
   const [filter, setFilter] = useState("all");
-  const [confirmDelete, setConfirmDelete] = useState(null); // task to confirm delete
+  const [search, setSearch] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(()=>{ if(initialOpenId){setSelectedId(initialOpenId);onClearOpenId&&onClearOpenId();}}, [initialOpenId]);
 
@@ -1030,11 +1061,26 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
   const selectedTask = selectedId ? tasks.find(t=>t.id===selectedId) : null;
 
   const filtered = visible.filter(t=>{
+    // Search filter — match by code (#XXXXXX) or title
+    if (search.trim()) {
+      const q = search.trim().replace(/^#/,"").toLowerCase();
+      const code = t.id.slice(-6).toLowerCase();
+      const title = t.title.toLowerCase();
+      if (!code.includes(q) && !title.includes(q)) return false;
+    }
     if(filter==="all") return true;
     if(filter==="mine") return t.openedBy===user.id;
     if(filter==="pending") return t.status==="awaiting_approval";
     return t.status===filter;
   });
+
+  // If search finds exactly one task by code, auto-open it
+  useEffect(() => {
+    if (!search.trim()) return;
+    const q = search.trim().replace(/^#/,"").toLowerCase();
+    const exact = visible.find(t => t.id.slice(-6).toLowerCase() === q);
+    if (exact) { setSelectedId(exact.id); setSearch(""); }
+  }, [search]);
 
   if(selectedTask) return (
     <TaskDetail task={selectedTask} user={user} tasks={tasks} setTasks={setTasks}
@@ -1079,7 +1125,17 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div><h1 className="text-xl font-bold text-slate-100">Tarefas</h1>
           <p className="text-sm text-slate-400">{visible.length} visível(is) para você</p></div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center flex-wrap">
+          {/* Search box */}
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/>
+            <input
+              value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por #ID ou título..."
+              className="pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-52"
+            />
+            {search && <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"><XIcon size={12}/></button>}
+          </div>
           {user.role==="area_manager"&&<Btn variant="secondary" size="sm" onClick={()=>setShowProposeFlow(true)}><Layers size={13}/>Propor Fluxo</Btn>}
           {user.role!=="auditor"&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Nova Tarefa</Btn>}
         </div>
@@ -5648,12 +5704,30 @@ export default function OpsControl() {
     const calcWorkDays = (startIso) => {
       if (!startIso) return 0;
       const start = new Date(startIso);
-      const now_ = new Date();
-      let days = 0;
+      const now_  = new Date();
+
+      // Feriados nacionais fixos (dd/mm)
+      const FERIADOS_FIXOS = new Set([
+        "01/01","21/04","01/05","07/09","12/10","02/11","15/11","25/12"
+      ]);
+      const isFeriado = (d) => {
+        const dd = String(d.getDate()).padStart(2,"0");
+        const mm = String(d.getMonth()+1).padStart(2,"0");
+        return FERIADOS_FIXOS.has(`${dd}/${mm}`);
+      };
+
+      // Start counting from the NEXT day after startedAt
       const cur = new Date(start);
-      while (cur < now_) {
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(0, 0, 0, 0);
+
+      let days = 0;
+      const end = new Date(now_);
+      end.setHours(0, 0, 0, 0);
+
+      while (cur <= end) {
         const dow = cur.getDay();
-        if (dow !== 0 && dow !== 6) days++;
+        if (dow !== 0 && dow !== 6 && !isFeriado(cur)) days++;
         cur.setDate(cur.getDate() + 1);
       }
       return days;
