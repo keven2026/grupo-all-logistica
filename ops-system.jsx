@@ -2897,8 +2897,8 @@ const MOT_ETAPA = {
 function exportarCSV(fec) {
   const hasFat = fec.mots.some(c => (c.totalFaturado||0) > 0);
   const rows = [[
-    "Motorista","Matrícula","Tipo Pagamento","CTEs Total","Pacotes Entregues",
-    "Dias Trabalhados","Diária (R$)","Pacotes (R$)","Correções (R$)","Total Pago (R$)",
+    "Motorista","Matrícula","Tipo Pagamento","CTEs Entregues","Dias Trabalhados",
+    "Diária (R$)","CTEs (R$)","Correções (R$)","Total Pago (R$)",
     ...(hasFat ? ["Total Faturado (R$)","Saldo (R$)","Margem %"] : []),
     "Status"
   ]];
@@ -2909,10 +2909,10 @@ function exportarCSV(fec) {
     const marg = fat > 0 ? ((sal/fat)*100).toFixed(1) : "";
     rows.push([
       c.nome, c.mat, c.tipo,
-      c.totalCTEs, c.totalPacotes,
+      c.totalCTEs, c.diasUnicos||1,
       c.diasUnicos || 1,
       c.vDiaria.toFixed(2).replace(".",","),
-      c.vPacotes.toFixed(2).replace(".",","),
+      (c.vCTEs||c.vPacotes||0).toFixed(2).replace(".",","),
       (c.totalBruto - c.subtotal).toFixed(2).replace(".",","),
       pago.toFixed(2).replace(".",","),
       ...(hasFat ? [fat.toFixed(2).replace(".",","), sal.toFixed(2).replace(".",","), marg] : []),
@@ -2923,7 +2923,7 @@ function exportarCSV(fec) {
   // Per-CTE detail sheet if has faturado
   if (hasFat) {
     rows.push([]); rows.push(["— DETALHE POR CTE —"]);
-    rows.push(["Motorista","Matrícula","Nº CTE","Data","Pacotes","Val. Faturado (R$)","Val. Pago Est. (R$)","Saldo (R$)"]);
+    rows.push(["Motorista","Matrícula","Nº CTE","Data","Val. Faturado (R$)","Val. Pago Est. (R$)","Saldo (R$)"]);
     fec.mots.forEach(c => {
       c.entregas?.forEach(e => {
         const vPago = (c.vPacotes > 0 && c.totalPacotes > 0) ? (e.qPacotes / c.totalPacotes) * c.vPacotes : 0;
@@ -2940,7 +2940,7 @@ function exportarCSV(fec) {
   rows.push([]);
   rows.push([
     "TOTAL","","","",
-    fec.mots.reduce((s,c)=>s+c.totalPacotes,0),
+    fec.mots.reduce((s,c)=>s+c.totalCTEs,0),
     fec.mots.reduce((s,c)=>s+(c.diasUnicos||1),0),
     fec.mots.reduce((s,c)=>s+c.vDiaria,0).toFixed(2).replace(".",","),
     fec.mots.reduce((s,c)=>s+c.vPacotes,0).toFixed(2).replace(".",","),
@@ -3443,7 +3443,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-slate-100">{c.nome}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">Mat: {c.mat} · {c.totalCTEs} CTEs · {c.entregas.length} entregas · {c.totalPacotes} pcts</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Mat: {c.mat} · {c.totalCTEs} CTEs entregues</p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-emerald-400">{fmt(c.subtotal)}</p>
@@ -3837,13 +3837,12 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                     {c.comprovanteMot && <Badge color="#10b981">Comprov.</Badge>}
                   </div>
                   <div className="grid grid-cols-3 gap-3 mt-2 text-xs">
-                    <span className="text-slate-400">CTEs: <span className="font-semibold text-slate-200">{c.totalCTEs}</span></span>
-                    <span className="text-slate-400">Entregas: <span className="font-semibold text-emerald-400">{c.entregas.length}</span></span>
-                    <span className="text-slate-400">Pacotes: <span className="font-semibold text-emerald-400">{c.totalPacotes}</span></span>
+                    <span className="text-slate-400">CTEs entregues: <span className="font-semibold text-emerald-400">{c.totalCTEs}</span></span>
+                    <span className="text-slate-400">Dias: <span className="font-semibold text-slate-200">{c.diasUnicos||1}</span></span>
                   </div>
                   <div className="flex gap-3 mt-1 text-xs flex-wrap">
                     {c.vDiaria > 0 && <span className="text-amber-400">Diária: {c.diasUnicos||1} dia(s) × {fmt(c.valorDiaria)} = {fmt(c.vDiaria)}</span>}
-                    {c.vPacotes > 0 && <span className="text-emerald-400">{c.totalPacotes} × {fmt(c.valorPacote)} = {fmt(c.vPacotes)}</span>}
+                    {c.vCTEs > 0 && <span className="text-emerald-400">{c.totalCTEs} CTEs × {fmt(c.valorCTE||c.valorPacote)} = {fmt(c.vCTEs)}</span>}
                   </div>
                   {c.comentarioAgr && <p className="text-xs text-slate-400 mt-1 italic">"{c.comentarioAgr}"</p>}
                   {c.comentarioGest && <p className="text-xs text-orange-400 mt-1 italic">Gestor: "{c.comentarioGest}"</p>}
@@ -3962,7 +3961,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
             <Card key={c.id} className="overflow-hidden">
               <div className="flex items-center justify-between p-3 border-b border-slate-700 bg-slate-900">
                 <p className="text-sm font-semibold text-slate-100">{c.nome} <span className="text-xs text-slate-500 font-normal">Mat: {c.mat}</span></p>
-                <span className="text-xs text-emerald-400 font-semibold">{c.entregas.length} entregas · {c.totalPacotes} pcts · {fmt(c.totalBruto)}</span>
+                <span className="text-xs text-emerald-400 font-semibold">{c.totalCTEs} CTEs · {fmt(c.totalBruto)}</span>
               </div>
               {c.entregas.length > 0 ? (
                 <div className="overflow-x-auto max-h-52">
@@ -4419,7 +4418,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
   const resumo = useMemo(() => {
     let pago=0,aReceber=0,pendenteCiencia=0,contestado=0,totalPacotes=0,totalCTEs=0;
     meusFechamentos.forEach(({ fec, mot }) => {
-      totalPacotes += mot.totalPacotes||0; totalCTEs += mot.totalCTEs||0;
+      totalCTEs += mot.totalCTEs||0;
       if (mot.etapa==="pago") pago+=mot.totalBruto;
       else if (mot.etapa==="fin") aReceber+=mot.totalBruto;   // financeiro vai pagar
       else if (mot.etapa==="agr") pendenteCiencia+=mot.totalBruto;  // aguardando minha ciência
@@ -4514,7 +4513,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
           </div>
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
             <p className="text-xs text-slate-400 mb-1">Total de Pacotes</p>
-            <p className="text-xl font-bold text-slate-100">{resumo.totalPacotes.toLocaleString("pt-BR")}</p>
+            <p className="text-xl font-bold text-slate-100">{resumo.totalCTEs.toLocaleString("pt-BR")}</p>
             <p className="text-xs text-slate-500 mt-0.5">{resumo.totalCTEs} CTEs histórico</p>
           </div>
         </div>
@@ -4556,7 +4555,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
             </div>
             <div className="grid grid-cols-3 gap-3 text-sm">
               {mot.vDiaria>0&&<div className="bg-slate-900 rounded-lg p-2.5 text-center"><p className="text-xs text-slate-400">{mot.diasUnicos||1} dia(s)</p><p className="font-bold text-amber-400">{fmt(mot.vDiaria)}</p></div>}
-              {mot.vPacotes>0&&<div className="bg-slate-900 rounded-lg p-2.5 text-center"><p className="text-xs text-slate-400">{mot.totalPacotes} pacotes</p><p className="font-bold text-emerald-400">{fmt(mot.vPacotes)}</p></div>}
+              {(mot.vCTEs||mot.vPacotes)>0&&<div className="bg-slate-900 rounded-lg p-2.5 text-center"><p className="text-xs text-slate-400">{mot.totalCTEs} CTEs</p><p className="font-bold text-emerald-400">{fmt(mot.vCTEs||mot.vPacotes)}</p></div>}
               {mot.correcoes?.length>0&&<div className="bg-slate-900 rounded-lg p-2.5 text-center"><p className="text-xs text-slate-400">Ajustes</p><p className="font-bold text-blue-400">{fmt(mot.correcoes.reduce((s,c)=>s+c.valor,0))}</p></div>}
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 text-center col-span-3 md:col-span-1">
                 <p className="text-xs text-emerald-400/70">Total a receber</p>
@@ -4569,7 +4568,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
                 {/* Detail */}
                 <div className="bg-slate-900 rounded-lg p-3 text-xs space-y-1 border border-slate-700">
                   <div className="flex justify-between"><span className="text-slate-400">CTEs planilha</span><span className="text-slate-200">{mot.totalCTEs}</span></div>
-                  <div className="flex justify-between"><span className="text-emerald-400">Entregas (evento=entrega)</span><span className="text-emerald-400">{mot.entregas?.length||0} CTEs · {mot.totalPacotes} pcts</span></div>
+                  <div className="flex justify-between"><span className="text-emerald-400">Entregas (evento=entrega)</span><span className="text-emerald-400">{mot.totalCTEs} CTEs entregues</span></div>
                   {mot.vDiaria>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.diasUnicos||1} dia(s) × {fmt(mot.valorDiaria)}</span><span className="text-amber-400">{fmt(mot.vDiaria)}</span></div>}
                   {mot.vPacotes>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.tipo==="diaria_excedente"?`Excedente: ${mot.excedente} pcts × ${fmt(mot.valorPacote)}`:`${mot.totalPacotes} × ${fmt(mot.valorPacote)}`}</span><span className="text-emerald-400">{fmt(mot.vPacotes)}</span></div>}
                   {mot.correcoes?.map(cr=><div key={cr.id} className="flex justify-between items-start gap-2"><span className="text-blue-400 flex-1">CTE {cr.ncte}{cr.data?` (${cr.data})`:""} — {cr.justificativa}</span><span className={`font-bold text-xs px-1.5 py-0.5 rounded whitespace-nowrap ${cr.valor>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400"}`}>{cr.valor>=0?"+ ":"- "}{fmt(Math.abs(cr.valor))} {cr.valor>=0?"(Acréscimo)":"(Débito)"}</span></div>)}
@@ -4666,7 +4665,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
                       <Badge color={etapaInfo.cor}>{etapaInfo.label}</Badge>
                     </div>
                     <p className="font-semibold text-slate-100">{fec.descricao}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{fec.periodo} · {mot.totalCTEs} CTEs · {mot.totalPacotes} pacotes</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{fec.periodo} · {mot.totalCTEs} CTEs entregues</p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-lg font-bold text-emerald-400">{fmt(mot.totalBruto)}</p>
