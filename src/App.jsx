@@ -42,7 +42,7 @@ const SEED = {
     { id:"a4", name:"Tecnologia" },
   ],
   users: [
-    { id:"u1", name:"Carlos Mendes", email:"carlos@ops.com", password:"123456", role:"director",     areaIds:[], financialAccess:true,  fechamentoAccess:true  },
+    { id:"u1", name:"Carlos Mendes", email:"carlos@ops.com", password:"123456", phone:"27999990001", role:"director",     areaIds:[], financialAccess:true,  fechamentoAccess:true  },
     { id:"u2", name:"Ana Costa",     email:"ana@ops.com",    password:"123456", role:"area_manager", areaIds:["a1"], financialAccess:false, fechamentoAccess:true  },
     { id:"u3", name:"Bruno Silva",   email:"bruno@ops.com",  password:"123456", role:"area_manager", areaIds:["a2"], financialAccess:false, fechamentoAccess:false },
     { id:"u4", name:"Mariana Neves", email:"mariana@ops.com",password:"123456", role:"area_manager", areaIds:["a3"], financialAccess:true,  fechamentoAccess:true  },
@@ -200,6 +200,10 @@ const SEED = {
     { id:"mt8", nome:"Webert Ferreira Pinto",       matricula:"136992", email:"webert@email.com",    cpf:"888.999.000-11", tipoPagamento:"ambos",  valorDiaria:85,  valorPacote:1.25, ativo:true, codigoAcesso:"AGR-WFP-8819" },
   ],
   fechamentos:[],
+  unidades:[
+    { id:"un1", codigo:"000001596", nome:"ALL LOGISTICA E SERVICOS DE MALOTES LTDA" }
+  ],
+  faturamentosJadlog:[],
 };
 
 // ─────────────────────────────────────────────
@@ -216,59 +220,82 @@ const getSupabase = () => {
   return window._supabaseClient;
 };
 
+// ── Email notification via mailto (opens email client) ──────────────
+// For automatic emails, configure EmailJS: https://www.emailjs.com
+function notifyUsers(users, subject, body) {
+  // Try EmailJS if configured
+  if (window.emailjs && window.__EMAILJS_SERVICE__ && window.__EMAILJS_TEMPLATE__) {
+    users.forEach(u => {
+      if (!u.email) return;
+      window.emailjs.send(window.__EMAILJS_SERVICE__, window.__EMAILJS_TEMPLATE__, {
+        to_email: u.email, to_name: u.name, subject, message: body
+      }).catch(e => console.warn("EmailJS:", e));
+    });
+    return;
+  }
+  // Fallback: nothing (mailto would open popups for each user)
+  console.log("[Notif]", subject, "→", users.map(u=>u.email).join(", "));
+}
+const __STORE__ = {};
+
 function useLS(key, init) {
   const k = `ops3_${key}`;
-  const [val, setVal] = useState(() => {
-    try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : init; } catch { return init; }
-  });
-  const [synced, setSynced] = useState(false);
 
-  // Load from Supabase on mount
-  useEffect(() => {
-    const sb = getSupabase();
-    if (!sb) { setSynced(true); return; }
-    sb.from("app_data").select("value").eq("key", k).single()
-      .then(({ data }) => {
-        if (data?.value !== undefined && data.value !== null) {
-          setVal(data.value);
-          try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
-        }
-        setSynced(true);
-      });
+  // Initialize store entry once
+  if (__STORE__[k] === undefined) {
+    let fromLS = null;
+    try { const s = localStorage.getItem(k); fromLS = s ? JSON.parse(s) : null; } catch {}
+    __STORE__[k] = fromLS !== null ? fromLS : init;
+  }
 
-    // Subscribe to realtime changes
-    const channel = sb.channel(`realtime:${k}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "app_data", filter: `key=eq.${k}` },
-        (payload) => {
-          if (payload.new?.value !== undefined) {
-            // If we wrote locally in the last 3 seconds, ignore this update (it's our own echo or a race)
-            const local = window.__localState?.[k];
-            if (local && (Date.now() - local.ts) < 3000) return;
-            const incoming = payload.new.value;
-            setVal(incoming);
-            try { localStorage.setItem(k, JSON.stringify(incoming)); } catch {}
-          }
-        })
-      .subscribe();
-
-    return () => sb.removeChannel(channel);
-  }, [k]);
+  const [val, setVal] = useState(() => __STORE__[k]);
 
   const set = v => {
-    const nv = typeof v === "function" ? v(val) : v;
+    const nv = typeof v === "function" ? v(__STORE__[k]) : v;
+    __STORE__[k] = nv; // update global store FIRST
     setVal(nv);
-    // Save to localStorage immediately (offline fallback)
     try { localStorage.setItem(k, JSON.stringify(nv)); } catch {}
-    // Track locally what we have so realtime doesn't overwrite
-    window.__localState = window.__localState || {};
-    window.__localState[k] = { value: nv, ts: Date.now() };
     // Save to Supabase
     const sb = getSupabase();
     if (sb) {
+      window.__localState = window.__localState || {};
+      window.__localState[k] = { ts: Date.now() };
       sb.from("app_data").upsert({ key: k, value: nv }, { onConflict: "key" })
-        .then(({ error }) => { if (error) console.warn("[useLS] Supabase save error:", error.message); });
+        .then(({ error }) => { if (error) console.warn("[useLS] Supabase:", error.message); });
     }
   };
+
+  // Load from Supabase once on mount (only if not recently written)
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) return;
+    sb.from("app_data").select("value").eq("key", k).single()
+      .then(({ data }) => {
+        if (data?.value !== undefined && data.value !== null) {
+          const local = window.__localState?.[k];
+          if (local && (Date.now() - local.ts) < 5000) return; // skip if we wrote recently
+          __STORE__[k] = data.value;
+          setVal(data.value);
+          try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
+        }
+      });
+
+    // Poll every 30s for multi-user sync
+    const iv = setInterval(() => {
+      const local = window.__localState?.[k];
+      if (local && (Date.now() - local.ts) < 5000) return;
+      sb.from("app_data").select("value").eq("key", k).single()
+        .then(({ data }) => {
+          if (data?.value !== undefined && data.value !== null) {
+            __STORE__[k] = data.value;
+            setVal(data.value);
+            try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
+          }
+        });
+    }, 30000);
+
+    return () => clearInterval(iv);
+  }, [k]);
 
   return [val, set];
 }
@@ -413,14 +440,77 @@ const NAV = [
   { id:"profitability", label:"Rentabilidade",   icon:TrendingUp,      roles:["director","area_manager","auditor"],             financial:true },
   { id:"forecast",      label:"Forecast",        icon:BarChart2,       roles:["director","area_manager","auditor"],             financial:true },
   { id:"fechamento",    label:"Fechamento",      icon:Truck,           roles:["director","area_manager","operator","auditor"],  financial:false, fechamento:true },
+  { id:"fatjadlog",     label:"Fat. Jadlog",     icon:BarChart2,       roles:["director","area_manager","auditor"],              financial:true  },
   { id:"pagamentos",    label:"Pagamentos",      icon:CreditCard,      roles:["director","area_manager","auditor"],              financial:true  },
   { id:"admin",         label:"Administração",   icon:Settings,        roles:["director"],                                       financial:false },
 ];
-function Sidebar({ user, view, setView, onLogout, areas }) {
+function Sidebar({ user, view, setView, onLogout, areas, setUsers, users, tasks }) {
   const area = areas.filter(a => userAreaIds(user).includes(a.id)).map(a=>a.name).join(", ");
   const hasF = userHasFinancial(user);
+  const [showPwd, setShowPwd] = useState(false);
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [pwdErr, setPwdErr] = useState("");
+
+  const changePwd = () => {
+    if (user.password !== oldPwd) { setPwdErr("Senha atual incorreta"); return; }
+    if (newPwd.length < 4) { setPwdErr("Nova senha deve ter ao menos 4 caracteres"); return; }
+    setUsers(p => p.map(u => u.id === user.id ? {...u, password: newPwd} : u));
+    setShowPwd(false); setOldPwd(""); setNewPwd(""); setPwdErr("");
+    alert("Senha alterada com sucesso!");
+  };
+
+  // Emergency WhatsApp: open wa.me for users with pending tasks
+  const sendEmergency = () => {
+    const pending = tasks.filter(t => t.status === "awaiting_approval" || t.status === "in_progress");
+    const usersToNotify = users.filter(u => {
+      if (u.role === "auditor") return false;
+      return pending.some(t => {
+        const tpl = null; // simplified - notify all active users
+        return true;
+      });
+    });
+    const siteUrl = window.location.href.split("#")[0];
+    const msg = encodeURIComponent(`🚨 AÇÃO URGENTE NECESSÁRIA no sistema Grupo All Logística!\n\nHá tarefas aguardando sua ação. Acesse agora:\n${siteUrl}\n\nEquipe Grupo All`);
+    let sent = 0;
+    users.filter(u => u.phone && u.role !== "auditor" && u.id !== user.id).forEach(u => {
+      const phone = u.phone.replace(/\D/g,"");
+      const fullPhone = phone.startsWith("55") ? phone : "55" + phone;
+      window.open(`https://wa.me/${fullPhone}?text=${msg}`, "_blank");
+      sent++;
+    });
+    if (sent === 0) alert("Nenhum usuário com WhatsApp cadastrado. Adicione o telefone dos usuários em Administração → Usuários.");
+    else alert(`✅ WhatsApp aberto para ${sent} usuário(s). Confirme o envio em cada aba.`);
+  };
+
   return (
     <div className="w-56 bg-slate-950 border-r border-slate-800 flex flex-col flex-shrink-0">
+      {/* Change password modal */}
+      {showPwd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={()=>setShowPwd(false)}>
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm space-y-4 mx-4" onClick={e=>e.stopPropagation()}>
+            <h3 className="text-base font-bold text-slate-100">Alterar Senha</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Senha atual</label>
+                <input type="password" value={oldPwd} onChange={e=>{setOldPwd(e.target.value);setPwdErr("");}}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Nova senha</label>
+                <input type="password" value={newPwd} onChange={e=>{setNewPwd(e.target.value);setPwdErr("");}}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+              </div>
+              {pwdErr && <p className="text-xs text-red-400">{pwdErr}</p>}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={changePwd} className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold">Salvar</button>
+              <button onClick={()=>{setShowPwd(false);setOldPwd("");setNewPwd("");setPwdErr("");}} className="flex-1 py-2.5 rounded-xl bg-slate-700 text-slate-200 text-sm font-semibold">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="p-4 border-b border-slate-800">
         <div className="py-1">
           <img src="data:image/webp;base64,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" alt="Grupo All Logística" className="h-8 w-auto"/>
@@ -437,14 +527,23 @@ function Sidebar({ user, view, setView, onLogout, areas }) {
           );
         })}
       </nav>
-      <div className="p-3 border-t border-slate-800">
-        <div className="flex items-center gap-2 px-3 py-2 mb-2">
+      <div className="p-3 border-t border-slate-800 space-y-1">
+        <div className="flex items-center gap-2 px-3 py-2">
           <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-amber-400">{user.name[0]}</div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-slate-200 truncate">{user.name}</p>
             <p className="text-xs text-slate-500 truncate">{area || ROLE_LABELS[user.role]}</p>
           </div>
         </div>
+        <button onClick={()=>setShowPwd(true)} className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-all">
+          <Lock size={13}/><span>Alterar Senha</span>
+        </button>
+        {user.role !== "auditor" && (
+          <button onClick={sendEmergency}
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-bold text-red-400 hover:bg-red-500/10 border border-red-500/20 hover:border-red-500/40 transition-all">
+            <span className="text-base leading-none">🚨</span><span>EMERGÊNCIA — WhatsApp</span>
+          </button>
+        )}
         <button onClick={onLogout} className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-red-400 hover:bg-red-400/5 transition-all">
           <LogOut size={14}/><span>Sair</span>
         </button>
@@ -931,6 +1030,7 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
   const [selectedId, setSelectedId] = useState(initialOpenId||null);
   const [showNew, setShowNew] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [confirmDelete, setConfirmDelete] = useState(null); // task to confirm delete
 
   useEffect(()=>{ if(initialOpenId){setSelectedId(initialOpenId);onClearOpenId&&onClearOpenId();}}, [initialOpenId]);
 
@@ -961,6 +1061,32 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
 
   return (
     <div className="p-6 space-y-5">
+      {/* Inline delete confirmation modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setConfirmDelete(null)}>
+          <div className="bg-slate-800 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm space-y-4 mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={18} className="text-red-400"/>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-100">Excluir tarefa?</p>
+                <p className="text-xs text-slate-400 mt-0.5">{confirmDelete.title}</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { const id = confirmDelete.id; setTasks(p => p.filter(x => x.id !== id)); setConfirmDelete(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold">
+                Sim, excluir
+              </button>
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div><h1 className="text-xl font-bold text-slate-100">Tarefas</h1>
           <p className="text-sm text-slate-400">{visible.length} visível(is) para você</p></div>
@@ -1003,7 +1129,10 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
                     {needsAction&&<span className="text-xs text-amber-400 font-semibold animate-pulse">● Ação necessária</span>}
                     {t.attachments?.length>0&&<span className="text-xs text-slate-500 flex items-center gap-0.5"><Paperclip size={10}/>{t.attachments.length}</span>}
                   </div>
-                  <p className="font-semibold text-slate-100 text-sm">{t.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-slate-100 text-sm">{t.title}</p>
+                    <span className="text-xs font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded">#{t.id.slice(-6).toUpperCase()}</span>
+                  </div>
                   <div className="flex items-center gap-4 mt-1.5 flex-wrap">
                     <span className="text-xs text-slate-500 flex items-center gap-1"><User size={10}/>{opener?.name}</span>
                     <span className="text-xs text-slate-500 flex items-center gap-1"><Building2 size={10}/>{cNames||"—"}</span>
@@ -1013,10 +1142,10 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-amber-400 opacity-0 group-hover:opacity-100 transition-all font-semibold">Abrir →</span>
-                    {(user.role==="director"||(user.role!=="auditor"&&t.openedBy===user.id))&&(
+                    {user.role !== "auditor" && (
                       <button
-                        onClick={e=>{e.stopPropagation();if(window.confirm(`Excluir "${t.title}"?`))setTasks(p=>p.filter(x=>x.id!==t.id));}}
-                        className="opacity-0 group-hover:opacity-100 transition-all text-slate-600 hover:text-red-400 p-1 rounded"
+                        onClick={e=>{e.stopPropagation(); setConfirmDelete(t);}}
+                        className="text-slate-500 hover:text-red-400 p-1 rounded transition-colors"
                         title="Excluir tarefa">
                         <Trash2 size={13}/>
                       </button>
@@ -1079,6 +1208,18 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     const ns=tpl.steps[next];
     const withStart = statuses.map((ss,i) => i===next ? {...ss, startedAt: now()} : ss);
     updateTask({status:ns.requiresApproval?"awaiting_approval":"in_progress",currentStepIndex:next,stepStatuses:withStart});
+    // Email notification
+    try {
+      const assignee = ns.assigneeUserId ? users.find(u=>u.id===ns.assigneeUserId) : null;
+      const toNotify = assignee ? [assignee] : users.filter(u=>
+        (ns.areaId ? (u.areaIds||[]).includes(ns.areaId) : true) &&
+        ["director","area_manager","operator"].includes(u.role)
+      );
+      notifyUsers(toNotify,
+        `[Grupo All] Tarefa: ${task.title} — Etapa ${next+1}: ${ns.name}`,
+        `A tarefa "${task.title}" avançou para a etapa "${ns.name}".\n\nAcesse o sistema para tomar ação: ${window.location.href}`
+      );
+    } catch(e) {}
   };
 
   const handleAdvance = () => {
@@ -1101,6 +1242,38 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     setComment("");
   };
 
+  // Generate short code from task ID (last 6 chars uppercase)
+  const taskCode = "#" + task.id.slice(-6).toUpperCase();
+
+  // Emergency WhatsApp — notify users who should act on current/pending steps
+  const sendTaskEmergency = () => {
+    if (!tpl) return;
+    const siteUrl = window.location.origin || window.location.href.split("#")[0];
+    const msg = encodeURIComponent(
+      `🚨 URGENTE — Tarefa ${taskCode}\n\n"${task.title}"\n\nSua ação é necessária agora!\n\nAcesse: ${siteUrl}\n\nGrupo All Logística`
+    );
+    // Find who should be notified: assignee of current step OR area users OR all non-auditors
+    const currentStep_ = tpl.steps[task.currentStepIndex];
+    let toNotify = [];
+    if (currentStep_?.assigneeUserId) {
+      toNotify = users.filter(u => u.id === currentStep_.assigneeUserId);
+    } else if (currentStep_?.areaId) {
+      toNotify = users.filter(u => (u.areaIds||[]).includes(currentStep_.areaId) && u.role !== "auditor" && u.id !== user.id);
+    } else {
+      toNotify = users.filter(u => u.role !== "auditor" && u.id !== user.id);
+    }
+    const withPhone = toNotify.filter(u => u.phone);
+    if (withPhone.length === 0) {
+      alert("Nenhum usuário com WhatsApp cadastrado nessa etapa.\n\nCadastre o telefone em Administração → Usuários.");
+      return;
+    }
+    withPhone.forEach(u => {
+      const phone = u.phone.replace(/\D/g,"");
+      const full = phone.startsWith("55") ? phone : "55"+phone;
+      window.open(`https://wa.me/${full}?text=${msg}`, "_blank");
+    });
+  };
+
   if(editing) return (
     <TaskFormModal user={user} templates={templates} clients={clients} existing={task}
       onClose={()=>setEditing(false)}
@@ -1113,11 +1286,23 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 flex-shrink-0"><ArrowLeft size={18}/></button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold text-slate-100">{task.title}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg font-bold text-slate-100">{task.title}</h1>
+            <span className="text-xs font-mono bg-slate-700 text-slate-300 px-2 py-0.5 rounded select-all cursor-pointer"
+              onClick={() => { navigator.clipboard?.writeText(taskCode); }}
+              title="Clique para copiar">{taskCode}</span>
+          </div>
           <p className="text-xs text-slate-400">{task.templateName}</p>
         </div>
         <Badge color={STATUS_COLORS[task.status]}>{STATUS_LABELS[task.status]}</Badge>
         {canEdit&&<Btn variant="secondary" size="sm" onClick={()=>setEditing(true)}><Edit2 size={13}/>Editar</Btn>}
+        {!isTerminal && user.role !== "auditor" && (
+          <button onClick={sendTaskEmergency}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-all flex-shrink-0"
+            title="Enviar WhatsApp de urgência para os responsáveis desta etapa">
+            🚨 Urgência
+          </button>
+        )}
       </div>
 
       {/* Info */}
@@ -1409,88 +1594,127 @@ function CostModal({ title, clients, isFixed=false, onClose, onSave }) {
 // ─────────────────────────────────────────────
 // REVENUE VIEW — with fortnights
 // ─────────────────────────────────────────────
-function RevenueView({ user, revenues, setRevenues, clients }) {
-  const [showNew, setShowNew] = useState(false);
-  const [filterMonth, setFilterMonth] = useState(4);
+function RevenueView({ user, acrescimos, setAcrescimos, clients, faturamentosJadlog }) {
+  const [tab, setTab]           = useState("jadlog");
+  const [filterMonth, setFilterMonth] = useState(new Date().getMonth()+1);
+  const [filterYear, setFilterYear]   = useState(new Date().getFullYear());
+  const [showNew, setShowNew]   = useState(false);
   const canEdit = ["director","area_manager"].includes(user.role);
-  const filtered = revenues.filter(r=>r.month===filterMonth&&r.year===2025);
-  const total = filtered.reduce((s,r)=>s+r.value,0);
-  const p1 = filtered.filter(r=>r.period===1).reduce((s,r)=>s+r.value,0);
-  const p2 = filtered.filter(r=>r.period===2).reduce((s,r)=>s+r.value,0);
-  const save=e=>{setRevenues(p=>[...p,{...e,id:uid(),createdBy:user.id}]);setShowNew(false);};
-  const del=id=>setRevenues(p=>p.filter(r=>r.id!==id));
 
-  // Group by client
-  const byClient = clients.map(cl=>{
-    const rows=filtered.filter(r=>r.clientId===cl.id);
-    if(rows.length===0) return null;
-    return {cl, rows, t1:rows.filter(r=>r.period===1).reduce((s,r)=>s+r.value,0), t2:rows.filter(r=>r.period===2).reduce((s,r)=>s+r.value,0), total:rows.reduce((s,r)=>s+r.value,0)};
-  }).filter(Boolean);
+  // Fat. Jadlog — agrupar por cliente/quinzena
+  const jadlogRows = (faturamentosJadlog||[]).flatMap(b=>b.rows).filter(r=>r.mes===filterMonth&&r.ano===filterYear);
+  const matchClient = cnpj => clients.find(c=>(c.cnpj||"").replace(/\D/g,"").replace(/^0+/,"")===cnpj.replace(/^0+/,""));
+  const jadlogByClient = {};
+  jadlogRows.forEach(r=>{
+    const cl = matchClient(r.cnpj);
+    const k  = cl ? cl.id : r.cnpj;
+    const nm = cl ? (cl.code||cl.name) : "CNPJ "+r.cnpj;
+    if (!jadlogByClient[k]) jadlogByClient[k] = {nome:nm, q1:0, q2:0, total:0, ctes:0, matched:!!cl};
+    jadlogByClient[k].ctes++;
+    jadlogByClient[k].total += r.comissao;
+    if (r.quinz===1) jadlogByClient[k].q1 += r.comissao;
+    else jadlogByClient[k].q2 += r.comissao;
+  });
+  const jadlogTotal = jadlogRows.reduce((s,r)=>s+r.comissao,0);
+
+  // Acréscimos avulsos
+  const filtAcr = (acrescimos||[]).filter(a=>a.month===filterMonth&&a.year===filterYear);
+  const acrTotal = filtAcr.reduce((s,a)=>s+a.value,0);
+
+  const saveAcr = a => { setAcrescimos(p=>[...p,{...a,id:uid(),createdBy:user.id}]); setShowNew(false); };
+  const delAcr  = id => setAcrescimos(p=>p.filter(a=>a.id!==id));
+
+  const YEARS = [new Date().getFullYear()-1, new Date().getFullYear()];
 
   return (
     <div className="p-6 space-y-5">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-xl font-bold text-slate-100">Faturamento</h1><p className="text-sm text-slate-400">Por cliente e quinzena</p></div>
-        {canEdit&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Novo Lançamento</Btn>}
-      </div>
-      <div className="flex items-center gap-4 flex-wrap">
-        <Sel value={filterMonth} onChange={e=>setFilterMonth(Number(e.target.value))}>
-          {MONTHS_SHORT.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
-        </Sel>
-        <div className="flex gap-3">
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-2 text-center">
-            <p className="text-xs text-slate-400">1ª Quinzena</p><p className="text-base font-bold text-emerald-400">{fmt(p1)}</p>
-          </div>
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-4 py-2 text-center">
-            <p className="text-xs text-slate-400">2ª Quinzena</p><p className="text-base font-bold text-blue-400">{fmt(p2)}</p>
-          </div>
-          <div className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-center">
-            <p className="text-xs text-slate-400">Total</p><p className="text-base font-bold text-slate-100">{fmt(total)}</p>
-          </div>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div><h1 className="text-xl font-bold text-slate-100">Faturamento</h1>
+          <p className="text-sm text-slate-400">Comissão Jadlog + acréscimos avulsos</p></div>
+        <div className="flex gap-2">
+          <Sel value={filterMonth} onChange={e=>setFilterMonth(Number(e.target.value))}>
+            {MONTHS_SHORT.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+          </Sel>
+          <Sel value={filterYear} onChange={e=>setFilterYear(Number(e.target.value))}>
+            {YEARS.map(y=><option key={y} value={y}>{y}</option>)}
+          </Sel>
         </div>
       </div>
-      <div className="space-y-4">
-        {byClient.length===0&&<div className="text-center py-10 text-slate-500 text-sm">Nenhum faturamento neste mês</div>}
-        {byClient.map(({cl,rows,t1,t2,total:ct})=>(
-          <Card key={cl.id} className="overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center font-bold text-blue-400 text-xs">{cl.code}</div>
-                <p className="font-semibold text-slate-100">{cl.name}</p>
-              </div>
-              <div className="flex gap-4 text-sm">
-                <div className="text-right"><p className="text-xs text-slate-400">1ª Q</p><p className="font-semibold text-emerald-400">{fmt(t1)}</p></div>
-                <div className="text-right"><p className="text-xs text-slate-400">2ª Q</p><p className="font-semibold text-blue-400">{fmt(t2)}</p></div>
-                <div className="text-right"><p className="text-xs text-slate-400">Total</p><p className="font-bold text-slate-100">{fmt(ct)}</p></div>
-              </div>
-            </div>
-            <div className="divide-y divide-slate-700/50">
-              {rows.map(r=>(
-                <div key={r.id} className="flex items-center justify-between px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${r.period===1?"bg-emerald-500/10 text-emerald-400":"bg-blue-500/10 text-blue-400"}`}>{r.period===1?"1ª Quinzena":"2ª Quinzena"}</span>
-                    <span className="text-sm text-slate-300">{r.description}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <p className="font-semibold text-emerald-400">{fmt(r.value)}</p>
-                    {canEdit&&<button onClick={()=>del(r.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={13}/></button>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-4">
+        <KpiCard label="Comissão Jadlog" value={fmt(jadlogTotal)} icon={Wallet} color="#10b981"/>
+        <KpiCard label="Acréscimos" value={fmt(acrTotal)} icon={Plus} color="#f59e0b"/>
+        <KpiCard label="Total Receita" value={fmt(jadlogTotal+acrTotal)} icon={TrendingUp} color="#60a5fa"/>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {[["jadlog","📊 Fat. Jadlog"],["acrescimos","➕ Acréscimos Avulsos"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setTab(v)}
+            className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
         ))}
       </div>
+
+      {/* Fat. Jadlog por cliente */}
+      {tab==="jadlog"&&(
+        <div className="space-y-3">
+          {Object.keys(jadlogByClient).length===0&&<p className="text-slate-500 text-sm text-center py-10">Nenhum dado para este mês. Importe a planilha em Fat. Jadlog.</p>}
+          {Object.entries(jadlogByClient).sort((a,b)=>b[1].total-a[1].total).map(([k,c])=>(
+            <Card key={k} className="p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${c.matched?"bg-emerald-400":"bg-amber-400"}`}/>
+                <div>
+                  <p className="font-semibold text-slate-100">{c.nome}</p>
+                  <p className="text-xs text-slate-500">{c.ctes.toLocaleString()} CTEs{!c.matched?" · sem cadastro":""}</p>
+                </div>
+              </div>
+              <div className="flex gap-5 text-right">
+                <div><p className="text-xs text-slate-500">1ª Quinzena</p><p className="text-sm font-bold text-emerald-400">{fmt(c.q1)}</p></div>
+                <div><p className="text-xs text-slate-500">2ª Quinzena</p><p className="text-sm font-bold text-blue-400">{fmt(c.q2)}</p></div>
+                <div><p className="text-xs text-slate-500">Total</p><p className="text-sm font-bold text-slate-100">{fmt(c.total)}</p></div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Acréscimos avulsos */}
+      {tab==="acrescimos"&&(
+        <div className="space-y-3">
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
+            💡 Acréscimos somam à comissão Jadlog como receita no Forecast e Rentabilidade. Ex: bônus, ajustes, receitas extras.
+          </div>
+          {canEdit&&<div className="flex justify-end"><Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Novo Acréscimo</Btn></div>}
+          {filtAcr.length===0&&<p className="text-slate-500 text-sm text-center py-6">Nenhum acréscimo neste mês.</p>}
+          {filtAcr.map(a=>{
+            const cl = clients.find(c=>c.id===a.clientId);
+            return (
+              <Card key={a.id} className="p-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">{cl?.name||"—"}</p>
+                  <p className="text-xs text-slate-400">{a.description} · {MONTHS_SHORT[a.month-1]}/{a.year}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <p className="font-bold text-amber-400">{fmt(a.value)}</p>
+                  {canEdit&&<button onClick={()=>delAcr(a.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={13}/></button>}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
       {showNew&&(
-        <Modal title="Novo Faturamento" onClose={()=>setShowNew(false)}>
-          <RevenueForm clients={clients} onSave={save} onCancel={()=>setShowNew(false)}/>
+        <Modal title="Novo Acréscimo" onClose={()=>setShowNew(false)}>
+          <AcrescimoForm clients={clients} onSave={saveAcr} onCancel={()=>setShowNew(false)} defaultMonth={filterMonth} defaultYear={filterYear}/>
         </Modal>
       )}
     </div>
   );
 }
-function RevenueForm({ clients, onSave, onCancel }) {
-  const [f, setF] = useState({clientId:"",value:"",description:"",month:4,year:2025,period:1});
+function AcrescimoForm({ clients, onSave, onCancel, defaultMonth, defaultYear }) {
+  const [f,setF]=useState({clientId:"",value:"",description:"",month:defaultMonth,year:defaultYear});
   const sf=(k,v)=>setF(p=>({...p,[k]:v}));
   return (
     <div className="space-y-4">
@@ -1498,12 +1722,8 @@ function RevenueForm({ clients, onSave, onCancel }) {
         <option value="">Selecione...</option>
         {clients.filter(c=>c.active).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
       </Sel>
-      <Sel label="Período" value={f.period} onChange={e=>sf("period",Number(e.target.value))}>
-        <option value={1}>1ª Quinzena (dias 1–15)</option>
-        <option value={2}>2ª Quinzena (dias 16–31)</option>
-      </Sel>
       <Input label="Valor (R$)" type="number" placeholder="0" value={f.value} onChange={e=>sf("value",e.target.value)}/>
-      <Input label="Descrição" placeholder="Faturamento..." value={f.description} onChange={e=>sf("description",e.target.value)}/>
+      <Input label="Descrição" placeholder="Ex: Bônus de desempenho..." value={f.description} onChange={e=>sf("description",e.target.value)}/>
       <div className="flex gap-2">
         <Sel label="Mês" value={f.month} onChange={e=>sf("month",Number(e.target.value))}>{MONTHS_SHORT.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</Sel>
         <Input label="Ano" type="number" value={f.year} onChange={e=>sf("year",Number(e.target.value))}/>
@@ -1519,14 +1739,28 @@ function RevenueForm({ clients, onSave, onCancel }) {
 // ─────────────────────────────────────────────
 // PROFITABILITY — includes task costs
 // ─────────────────────────────────────────────
-function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks }) {
-  const [filterMonth, setFilterMonth] = useState(4);
+function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, faturamentosJadlog }) {
+  const [filterMonth, setFilterMonth] = useState(new Date().getMonth()+1);
+  const [filterYear,  setFilterYear]  = useState(new Date().getFullYear());
+  const [revenueSource, setRevenueSource] = useState("jadlog"); // "jadlog" | "manual"
+
+  // Helper: get Jadlog commission for a client in a given month/year
+  const getJadlogComissao = (clientId, month, year) => {
+    const cl = clients.find(c=>c.id===clientId);
+    if (!cl || !cl.cnpj) return 0;
+    const cnpj = cl.cnpj.replace(/\D/g,"").replace(/^0+/,"");
+    return (faturamentosJadlog||[]).flatMap(b=>b.rows).filter(r=>{
+      if (r.mes!==month || r.ano!==year) return false;
+      return r.cnpj.replace(/^0+/,"") === cnpj;
+    }).reduce((s,r)=>s+r.comissao,0);
+  };
 
   const data = useMemo(()=>clients.map(cl=>{
-    const rev=revenues.filter(r=>r.clientId===cl.id&&r.month===filterMonth&&r.year===2025).reduce((s,r)=>s+r.value,0);
+    const rev = revenueSource==="jadlog"
+      ? getJadlogComissao(cl.id, filterMonth, filterYear)
+      : revenues.filter(r=>r.clientId===cl.id&&r.month===filterMonth&&r.year===filterYear).reduce((s,r)=>s+r.value,0);
     const fc=fixedCosts.filter(f=>f.active).reduce((s,f)=>{const a=f.clientAllocation.find(a=>a.clientId===cl.id);return s+(a?f.value*a.percent/100:0);},0);
-    const vc=costEntries.filter(c=>c.month===filterMonth&&c.year===2025).reduce((s,c)=>{const a=c.clientAllocation.find(a=>a.clientId===cl.id);return s+(a?c.value*a.percent/100:0);},0);
-    // Task costs allocated to this client
+    const vc=costEntries.filter(c=>c.month===filterMonth&&c.year===filterYear).reduce((s,c)=>{const a=c.clientAllocation.find(a=>a.clientId===cl.id);return s+(a?c.value*a.percent/100:0);},0);
     const tc=tasks.reduce((s,t)=>s+t.costRationals.reduce((a,cr)=>{
       const al=t.clientAllocation.find(x=>x.clientId===cl.id);
       return a+(al?cr.value*al.percent/100:0);
@@ -1534,21 +1768,50 @@ function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks }
     const totalCost=fc+vc+tc; const profit=rev-totalCost;
     const margin=rev>0?(profit/rev*100):0;
     return {...cl,rev,fc,vc,tc,totalCost,profit,margin};
-  }),[clients,fixedCosts,costEntries,revenues,tasks,filterMonth]);
+  // eslint-disable-next-line
+  }),[clients,fixedCosts,costEntries,revenues,tasks,filterMonth,filterYear,revenueSource,faturamentosJadlog]);
 
   const totals=data.reduce((a,c)=>({rev:a.rev+c.rev,cost:a.cost+c.totalCost,profit:a.profit+c.profit}),{rev:0,cost:0,profit:0});
   const totalMargin=totals.rev>0?(totals.profit/totals.rev*100):0;
 
+  const YEARS = [new Date().getFullYear()-1, new Date().getFullYear()];
+
   return (
     <div className="p-6 space-y-5">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-xl font-bold text-slate-100">Rentabilidade</h1><p className="text-sm text-slate-400">Custos fixos + variáveis + tarefas por cliente</p></div>
-        <Sel value={filterMonth} onChange={e=>setFilterMonth(Number(e.target.value))}>
-          {MONTHS_SHORT.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
-        </Sel>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">Rentabilidade</h1>
+          <p className="text-sm text-slate-400">Receita − Custos por cliente</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Revenue source toggle */}
+          <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+            <button onClick={()=>setRevenueSource("jadlog")}
+              className={`px-3 py-1.5 font-semibold transition-all ${revenueSource==="jadlog"?"bg-emerald-600 text-white":"bg-slate-800 text-slate-400"}`}>
+              Fat. Jadlog
+            </button>
+            <button onClick={()=>setRevenueSource("manual")}
+              className={`px-3 py-1.5 font-semibold transition-all ${revenueSource==="manual"?"bg-emerald-600 text-white":"bg-slate-800 text-slate-400"}`}>
+              Manual
+            </button>
+          </div>
+          <Sel value={filterMonth} onChange={e=>setFilterMonth(Number(e.target.value))}>
+            {MONTHS_SHORT.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+          </Sel>
+          <Sel value={filterYear} onChange={e=>setFilterYear(Number(e.target.value))}>
+            {YEARS.map(y=><option key={y} value={y}>{y}</option>)}
+          </Sel>
+        </div>
       </div>
+
+      {revenueSource==="jadlog"&&(
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-4 py-2 text-xs text-blue-300">
+          💡 Receita = <strong>Comissão Jadlog</strong> (col. Liquido). Para casar, cadastre o CNPJ do cliente em Administração → Clientes.
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="Receita Total" value={fmt(totals.rev)} icon={Wallet} color="#10b981"/>
+        <KpiCard label="Comissão / Receita" value={fmt(totals.rev)} icon={Wallet} color="#10b981"/>
         <KpiCard label="Custo Total" value={fmt(totals.cost)} icon={DollarSign} color="#ef4444"/>
         <KpiCard label="Lucro / Margem" value={`${totalMargin.toFixed(1)}%`} sub={fmt(totals.profit)} icon={TrendingUp} color={totalMargin>20?"#10b981":"#f59e0b"}/>
       </div>
@@ -1845,7 +2108,7 @@ function TemplateBuilder({ areas, users, initial, onSave, onCancel, proposedBy }
 // ─────────────────────────────────────────────
 // ADMIN VIEW
 // ─────────────────────────────────────────────
-function AdminView({ areas, users, setUsers, clients, setClients, templates, setTemplates }) {
+function AdminView({ areas, setAreas, users, setUsers, clients, setClients, templates, setTemplates }) {
   const [tab, setTab] = useState("users");
   const [showNewUser, setShowNewUser] = useState(false);
   const [showNewClient, setShowNewClient] = useState(false);
@@ -1864,17 +2127,53 @@ function AdminView({ areas, users, setUsers, clients, setClients, templates, set
     setEditingTemplate(null);
   };
 
+  // Areas
+  const [newAreaName, setNewAreaName] = useState("");
+  const addArea = () => {
+    const name = newAreaName.trim(); if (!name) return;
+    setAreas(p=>[...p,{id:uid(),name,descricao:""}]);
+    setNewAreaName("");
+  };
+  const deleteArea = id => setAreas(p=>p.filter(a=>a.id!==id));
+
+  // Edit user phone
+  const setUserPhone = (id, phone) => setUsers(p=>p.map(u=>u.id===id?{...u,phone}:u));
+  const setUserEmail = (id, email) => setUsers(p=>p.map(u=>u.id===id?{...u,email}:u));
+
   if(editingTemplate!==null) return <TemplateBuilder areas={areas} users={users} initial={editingTemplate==="new"?null:editingTemplate} onSave={saveTemplate} onCancel={()=>setEditingTemplate(null)}/>;
 
   return (
     <div className="p-6 space-y-5">
       <div><h1 className="text-xl font-bold text-slate-100">Administração</h1>
-        <p className="text-sm text-slate-400">Usuários, clientes, fluxos e acessos</p></div>
+        <p className="text-sm text-slate-400">Usuários, áreas, clientes e fluxos</p></div>
       <div className="flex gap-2 flex-wrap">
-        {[["users","Usuários"],["clients","Clientes"],["templates","Fluxos de Tarefa"]].map(([v,l])=>(
+        {[["users","👥 Usuários"],["areas","🏢 Áreas"],["clients","🤝 Clientes"],["templates","📋 Fluxos"]].map(([v,l])=>(
           <button key={v} onClick={()=>setTab(v)} className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
         ))}
       </div>
+
+      {/* ── ÁREAS ── */}
+      {tab==="areas"&&(
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <input value={newAreaName} onChange={e=>setNewAreaName(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&addArea()}
+              placeholder="Nome da nova área (ex: Atendimento)"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+            <Btn onClick={addArea} disabled={!newAreaName.trim()}><Plus size={14}/>Criar Área</Btn>
+          </div>
+          {areas.map(a=>(
+            <Card key={a.id} className="p-4 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-slate-100">{a.name}</p>
+                <p className="text-xs text-slate-500">{users.filter(u=>u.areaIds?.includes(a.id)).length} usuário(s)</p>
+              </div>
+              <button onClick={()=>deleteArea(a.id)} className="text-slate-600 hover:text-red-400 p-1.5"><Trash2 size={14}/></button>
+            </Card>
+          ))}
+          {areas.length===0&&<p className="text-slate-500 text-sm text-center py-8">Nenhuma área cadastrada.</p>}
+        </div>
+      )}
 
       {tab==="users"&&(
         <div className="space-y-3">
@@ -1899,6 +2198,7 @@ function AdminView({ areas, users, setUsers, clients, setClients, templates, set
                       {userHasFechamento(u)&&<Badge color="#60a5fa">🚚 Fechamento</Badge>}
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">{u.email}{userAreas?` · ${userAreas}`:""}</p>
+                      {u.phone&&<p className="text-xs text-emerald-400/70 mt-0.5">📱 {u.phone}</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
@@ -2010,13 +2310,14 @@ function AdminView({ areas, users, setUsers, clients, setClients, templates, set
 }
 
 function ClientForm({ onSave, onCancel }) {
-  const [name,setName]=useState(""); const [code,setCode]=useState("");
+  const [name,setName]=useState(""); const [code,setCode]=useState(""); const [cnpj,setCnpj]=useState("");
   return (
     <div className="space-y-4">
       <Input label="Nome" placeholder="Nome completo do cliente" value={name} onChange={e=>setName(e.target.value)}/>
       <Input label="Sigla / Código" placeholder="Ex: MAG" value={code} onChange={e=>setCode(e.target.value.toUpperCase())}/>
+      <Input label="CNPJ (para casar com Faturamento Jadlog)" placeholder="00.000.000/0001-00" value={cnpj} onChange={e=>setCnpj(e.target.value)}/>
       <div className="flex gap-2">
-        <Btn onClick={()=>name&&code&&onSave({name,code})} disabled={!name||!code} className="flex-1 justify-center">Salvar</Btn>
+        <Btn onClick={()=>name&&code&&onSave({name,code,cnpj})} disabled={!name||!code} className="flex-1 justify-center">Salvar</Btn>
         <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
       </div>
     </div>
@@ -2024,7 +2325,7 @@ function ClientForm({ onSave, onCancel }) {
 }
 
 function NewUserModal({ areas, onClose, onSave }) {
-  const [f,setF]=useState({name:"",email:"",password:"123456",role:"operator",areaIds:[],financialAccess:false});
+  const [f,setF]=useState({name:"",email:"",phone:"",password:"123456",role:"operator",areaIds:[],financialAccess:false,emailNotif:true});
   const sf=(k,v)=>setF(p=>({...p,[k]:v}));
   const toggleArea=id=>sf("areaIds",f.areaIds.includes(id)?f.areaIds.filter(a=>a!==id):[...f.areaIds,id]);
   const needsArea=["operator","area_manager"].includes(f.role);
@@ -2033,6 +2334,7 @@ function NewUserModal({ areas, onClose, onSave }) {
       <div className="space-y-4">
         <Input label="Nome completo" value={f.name} onChange={e=>sf("name",e.target.value)}/>
         <Input label="E-mail" type="email" value={f.email} onChange={e=>sf("email",e.target.value)}/>
+        <Input label="WhatsApp (com DDD)" placeholder="27 99999-9999" value={f.phone} onChange={e=>sf("phone",e.target.value)}/>
         <Input label="Senha inicial" value={f.password} onChange={e=>sf("password",e.target.value)}/>
         <Sel label="Perfil" value={f.role} onChange={e=>sf("role",e.target.value)}>
           <option value="operator">Operador</option>
@@ -2082,8 +2384,24 @@ const fcCalcCost  = e => (e?.fretePrevisto||0)+(e?.maoObraTercPrevisto||0)+fcCal
 const fcCalcCom   = e => fcCalcFat(e)*((e?.comissaoPercent||0)/100);
 const fcCalcImp   = e => fcCalcFat(e)*((e?.impostoPercent||0)/100);
 const fcCalcSaldo = e => fcCalcFat(e)-fcCalcCost(e)-fcCalcCom(e)-fcCalcImp(e);
-const fcGetFatReal= (revenues, clientId, month) =>
-  revenues.filter(r=>r.clientId===clientId&&r.month===month&&r.year===FC_YEAR).reduce((s,r)=>s+r.value,0);
+// Fat. Jadlog comissão real por cliente/mês (usa CNPJ do cliente)
+const fcGetFatReal = (revenues, clientId, month, faturamentosJadlog, clients, acrescimos) => {
+  // From Jadlog
+  const cl = (clients||[]).find(c=>c.id===clientId);
+  let jadlogTotal = 0;
+  if (cl?.cnpj && faturamentosJadlog?.length) {
+    const cnpj = cl.cnpj.replace(/\D/g,"").replace(/^0+/,"");
+    jadlogTotal = faturamentosJadlog.flatMap(b=>b.rows).filter(r=>{
+      if (r.mes !== month || r.ano !== FC_YEAR) return false;
+      return r.cnpj.replace(/^0+/,"") === cnpj;
+    }).reduce((s,r)=>s+r.comissao, 0);
+  }
+  // Plus manual acrescimos (positive adjustments)
+  const acrescimoTotal = (acrescimos||[])
+    .filter(a=>a.clientId===clientId&&a.month===month&&a.year===FC_YEAR)
+    .reduce((s,a)=>s+a.value, 0);
+  return jadlogTotal + acrescimoTotal;
+};
 
 // ─────────────────────────────────────────────
 // FORECAST — stable helpers at module level (never recreated)
@@ -2119,7 +2437,7 @@ function FcNumField({ label, clientId, month, field, defaultVal, setFE, prefix="
 // ─────────────────────────────────────────────
 // FORECAST — PREVISAO TAB
 // ─────────────────────────────────────────────
-function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, filterMonth, propagateGrowth }) {
+function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, filterMonth, propagateGrowth, faturamentosJadlog, acrescimos }) {
   const [expanded, setExpanded] = useState(clients[0]?.id || null);
 
   return (
@@ -2127,7 +2445,7 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
       {clients.filter(c => c.active).map(cl => {
         const e = fcGetEntry(forecastEntries, cl.id, filterMonth);
         const fat = fcCalcFat(e);
-        const fatReal = fcGetFatReal(revenues, cl.id, filterMonth);
+        const fatReal = fcGetFatReal(revenues, cl.id, filterMonth, faturamentosJadlog, clients, acrescimos);
         const isOpen = expanded === cl.id;
         return (
           <Card key={cl.id} className={`overflow-hidden transition-all ${isOpen ? "border-amber-500/30" : ""}`}>
@@ -2215,11 +2533,23 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
                 <div className="flex items-center justify-between pt-2 border-t border-slate-700">
                   <div>
                     <p className="text-sm font-semibold text-slate-300">Propagar crescimento para próximos meses</p>
-                    <p className="text-xs text-slate-500">Aplica {e?.growthRate??0}%/mês de {MONTHS_SHORT[filterMonth-1]} até Dezembro</p>
+                    <p className="text-xs text-slate-500">De {MONTHS_SHORT[filterMonth-1]} até Dezembro</p>
                   </div>
-                  <Btn variant="secondary" size="sm" onClick={() => propagateGrowth(cl.id, filterMonth)} disabled={!e||!e.growthRate}>
-                    <RefreshCw size={13}/> Propagar
-                  </Btn>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1">
+                      <input
+                        type="number" step="0.5" min="-100" max="100"
+                        defaultValue={e?.growthRate??0}
+                        key={`gr-${cl.id}-${filterMonth}`}
+                        onBlur={ev => fcUpsert(setForecastEntries, cl.id, filterMonth, { growthRate: Number(ev.target.value) })}
+                        className="w-12 bg-transparent text-sm text-amber-400 font-bold text-center focus:outline-none"
+                      />
+                      <span className="text-xs text-slate-400">%/mês</span>
+                    </div>
+                    <Btn variant="secondary" size="sm" onClick={() => propagateGrowth(cl.id, filterMonth)} disabled={!e}>
+                      <RefreshCw size={13}/> Propagar
+                    </Btn>
+                  </div>
                 </div>
               </div>
             )}
@@ -2230,7 +2560,7 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
   );
 }
 
-function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, filterMonth }) {
+function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, filterMonth, faturamentosJadlog, acrescimos }) {
   const upsertObs = (clientId, obs) => {
     setForecastEntries(prev => {
       const idx = prev.findIndex(f => f.clientId===clientId && f.month===filterMonth && f.year===FC_YEAR);
@@ -2240,9 +2570,11 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
   };
   const rows = clients.filter(c=>c.active).map(cl => {
     const e = fcGetEntry(forecastEntries, cl.id, filterMonth);
-    const fatReal = fcGetFatReal(revenues, cl.id, filterMonth);
+    const fatReal = fcGetFatReal(revenues, cl.id, filterMonth, faturamentosJadlog, clients, acrescimos);
     const fat = fatReal > 0 ? fatReal : fcCalcFat(e);
     const fatSrc = fatReal > 0 ? "real" : "prev";
+    const fatPrev = fcCalcFat(e);
+    const desvio = fatPrev > 0 ? ((fatReal - fatPrev) / fatPrev * 100) : null;
     const volReal = e?.volumetriaRealizada;
     const vol = volReal != null ? volReal : (e?.volumetria||0);
     const volSrc = volReal != null ? "real" : "prev";
@@ -2250,50 +2582,48 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
     const imposto = fat * ((e?.impostoPercent||0)/100);
     const comissao = fat * ((e?.comissaoPercent||0)/100);
     const saldo = fat - custos - imposto - comissao;
-    return { cl, e, fat, fatSrc, vol, volSrc, custos, imposto, comissao, saldo };
+    return { cl, e, fat, fatSrc, fatPrev, desvio, vol, volSrc, custos, imposto, comissao, saldo };
   });
-  const totals = rows.reduce((a,r) => ({ fat:a.fat+r.fat, custos:a.custos+r.custos, imposto:a.imposto+r.imposto, comissao:a.comissao+r.comissao, saldo:a.saldo+r.saldo }), { fat:0, custos:0, imposto:0, comissao:0, saldo:0 });
+  const totals = rows.reduce((a,r) => ({ fat:a.fat+r.fat, fatPrev:a.fatPrev+r.fatPrev, custos:a.custos+r.custos, imposto:a.imposto+r.imposto, comissao:a.comissao+r.comissao, saldo:a.saldo+r.saldo }), { fat:0, fatPrev:0, custos:0, imposto:0, comissao:0, saldo:0 });
   const SrcBadge = ({ src }) => <span className={`text-xs ml-1 font-bold ${src==="real"?"text-emerald-400":"text-amber-400/70"}`}>{src==="real"?"R":"P"}</span>;
   return (
     <div className="space-y-5">
+      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-2 text-xs text-emerald-300">
+        ✅ <strong>Realizado</strong> = Comissão Fat. Jadlog + Acréscimos avulsos. <span className="text-emerald-400 font-bold">R</span> = Realizado &nbsp;·&nbsp; <span className="text-amber-400/70 font-bold">P</span> = Previsto
+      </div>
       <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-        <KpiCard label="Faturamento" value={fmt(totals.fat)} icon={Wallet} color="#10b981"/>
+        <KpiCard label="Realizado" value={fmt(totals.fat)} icon={Wallet} color="#10b981"/>
+        <KpiCard label="Previsto" value={fmt(totals.fatPrev)} icon={BarChart2} color="#f59e0b"/>
         <KpiCard label="Custos" value={fmt(totals.custos)} icon={DollarSign} color="#ef4444"/>
         <KpiCard label="Impostos" value={fmt(totals.imposto)} icon={FileText} color="#8b5cf6"/>
-        <KpiCard label="Comissões" value={fmt(totals.comissao)} icon={TrendingUp} color="#f59e0b"/>
-        <KpiCard label="Saldo" value={fmt(totals.saldo)} icon={BarChart2} color={totals.saldo>=0?"#10b981":"#ef4444"}/>
+        <KpiCard label="Saldo" value={fmt(totals.saldo)} icon={TrendingUp} color={totals.saldo>=0?"#10b981":"#ef4444"}/>
       </div>
-      <p className="text-xs text-slate-500"><span className="text-emerald-400 font-bold">R</span> = Realizado &nbsp;·&nbsp; <span className="text-amber-400/70 font-bold">P</span> = Previsto</p>
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-700">
-              {["Cliente","Volume","Faturamento","Custos","Imposto","Comissão","Saldo","Resultado","Observação / Ação"].map(h=>(
+              {["Cliente","Volume","Realizado","Previsto","Desvio","Custos","Imposto","Comissão","Saldo","Observação"].map(h=>(
                 <th key={h} className="text-left text-xs font-semibold text-slate-400 px-4 py-3 whitespace-nowrap">{h}</th>
               ))}
             </tr></thead>
             <tbody>
-              {rows.map(({cl,e,fat,fatSrc,vol,volSrc,custos,imposto,comissao,saldo})=>(
+              {rows.map(({cl,e,fat,fatSrc,fatPrev,desvio,vol,volSrc,custos,imposto,comissao,saldo})=>(
                 <tr key={cl.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 align-top">
                   <td className="px-4 py-3 font-semibold text-slate-100 whitespace-nowrap">{cl.name}</td>
-                  <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{vol.toLocaleString("pt-BR")}<SrcBadge src={volSrc}/> <span className="text-slate-600 text-xs">un</span></td>
+                  <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{vol.toLocaleString("pt-BR")}<SrcBadge src={volSrc}/></td>
                   <td className="px-4 py-3 text-emerald-400 font-semibold whitespace-nowrap">{fmt(fat)}<SrcBadge src={fatSrc}/></td>
+                  <td className="px-4 py-3 text-amber-400/80 whitespace-nowrap">{fmt(fatPrev)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {desvio!==null ? <span className={`text-xs font-bold px-2 py-0.5 rounded ${desvio>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400"}`}>{desvio>=0?"+":""}{desvio.toFixed(1)}%</span> : <span className="text-slate-600 text-xs">—</span>}
+                  </td>
                   <td className="px-4 py-3 text-red-400 whitespace-nowrap">{fmt(custos)}</td>
                   <td className="px-4 py-3 text-purple-400 whitespace-nowrap">{fmt(imposto)}</td>
                   <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{fmt(comissao)}</td>
                   <td className={`px-4 py-3 font-bold whitespace-nowrap ${saldo>=0?"text-emerald-400":"text-red-400"}`}>{fmt(saldo)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-12 bg-slate-700 rounded-full h-1.5">
-                        <div className="h-1.5 rounded-full" style={{width:`${Math.max(0,Math.min(100,fat>0?(saldo/fat)*100:0))}%`,background:saldo>=0?"#10b981":"#ef4444"}}/>
-                      </div>
-                      <span className={`text-xs font-bold ${saldo>=0?"text-emerald-400":"text-red-400"}`}>{fat>0?`${((saldo/fat)*100).toFixed(1)}%`:"—"}</span>
-                    </div>
-                  </td>
                   <td className="px-4 py-3 min-w-[200px]">
                     <input defaultValue={e?.observacao||""} key={`obs-${cl.id}-${filterMonth}`}
                       onBlur={ev=>upsertObs(cl.id,ev.target.value)}
-                      placeholder="Observações / ações necessárias..."
+                      placeholder="Observações / ações..."
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"/>
                   </td>
                 </tr>
@@ -2302,20 +2632,23 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
             <tfoot><tr className="bg-slate-700/30">
               <td className="px-4 py-3 font-bold text-slate-200" colSpan={2}>TOTAL</td>
               <td className="px-4 py-3 text-emerald-400 font-bold">{fmt(totals.fat)}</td>
+              <td className="px-4 py-3 text-amber-400/80 font-bold">{fmt(totals.fatPrev)}</td>
+              <td className="px-4 py-3 font-bold">
+                {totals.fatPrev>0&&<span className={`text-xs font-bold px-2 py-0.5 rounded ${totals.fat>=totals.fatPrev?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400"}`}>{totals.fat>=totals.fatPrev?"+":""}{((totals.fat-totals.fatPrev)/totals.fatPrev*100).toFixed(1)}%</span>}
+              </td>
               <td className="px-4 py-3 text-red-400 font-bold">{fmt(totals.custos)}</td>
               <td className="px-4 py-3 text-purple-400 font-bold">{fmt(totals.imposto)}</td>
               <td className="px-4 py-3 text-amber-400 font-bold">{fmt(totals.comissao)}</td>
               <td className={`px-4 py-3 font-bold text-lg ${totals.saldo>=0?"text-emerald-400":"text-red-400"}`}>{fmt(totals.saldo)}</td>
-              <td className="px-4 py-3 font-bold text-amber-400">{totals.fat>0?`${((totals.saldo/totals.fat)*100).toFixed(1)}%`:"—"}</td>
               <td className="px-4 py-3"/>
             </tr></tfoot>
           </table>
         </div>
       </Card>
       <Card className="p-5">
-        <h3 className="text-sm font-bold text-slate-300 mb-4">Previsto vs Realizado — {MONTHS_SHORT[filterMonth-1]}</h3>
+        <h3 className="text-sm font-bold text-slate-300 mb-4">Previsto × Realizado (Fat. Jadlog) — {MONTHS_SHORT[filterMonth-1]}</h3>
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={rows.map(r=>({name:r.cl.code,Previsto:fcCalcFat(r.e),Realizado:fcGetFatReal(revenues,r.cl.id,filterMonth)||null,Saldo:r.saldo}))} barSize={20}>
+          <BarChart data={rows.map(r=>({name:r.cl.code,Previsto:r.fatPrev||null,Realizado:r.fat>0&&r.fatSrc==="real"?r.fat:null,Saldo:r.saldo}))} barSize={20}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
             <XAxis dataKey="name" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:12}}/>
             <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
@@ -2331,9 +2664,9 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
   );
 }
 
-function ForecastView({ clients, revenues, forecastEntries, setForecastEntries }) {
+function ForecastView({ clients, revenues, forecastEntries, setForecastEntries, faturamentosJadlog, acrescimos }) {
   const [subTab, setSubTab] = useState("previsao");
-  const [filterMonth, setFilterMonth] = useState(4);
+  const [filterMonth, setFilterMonth] = useState(new Date().getMonth()+1);
 
   const propagateGrowth = (clientId, fromMonth) => {
     const base = fcGetEntry(forecastEntries, clientId, fromMonth);
@@ -2364,19 +2697,19 @@ function ForecastView({ clients, revenues, forecastEntries, setForecastEntries }
           <p className="text-sm text-slate-400">Previsão de receita, custos e resultado por cliente</p>
         </div>
         <Sel value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))}>
-          {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m} 2025</option>)}
+          {MONTHS_SHORT.map((m, i) => <option key={i} value={i + 1}>{m} {FC_YEAR}</option>)}
         </Sel>
       </div>
       <div className="flex gap-2">
-        {[["previsao","📋 Previsão"],["resultado","📊 Resultado"]].map(([v,l]) => (
+        {[["previsao","📋 Previsão"],["resultado","📊 Previsto × Realizado"]].map(([v,l]) => (
           <button key={v} onClick={() => setSubTab(v)}
             className={`text-sm px-4 py-2 rounded-lg font-semibold border transition-all ${subTab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}>
             {l}
           </button>
         ))}
       </div>
-      {subTab==="previsao" && <PrevisaoTab clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} filterMonth={filterMonth} propagateGrowth={propagateGrowth}/>}
-      {subTab==="resultado" && <ResultadoTab clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} filterMonth={filterMonth}/>}
+      {subTab==="previsao" && <PrevisaoTab clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} filterMonth={filterMonth} propagateGrowth={propagateGrowth} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
+      {subTab==="resultado" && <ResultadoTab clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} filterMonth={filterMonth} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
     </div>
   );
 }
@@ -2440,7 +2773,7 @@ function calcFechamento(linhas, motoristas) {
       vCTEs,
       subtotal: vDiaria + vCTEs,
       correcoes: [], totalBruto: vDiaria + vCTEs,
-      etapa: "agr",
+      etapa: "op",   // op → gest → fin → agr → pago | revisao_op
       statusAgr: "pendente", comentarioAgr: "", nf: null,
       statusGest: null, comentarioGest: null,
       dataPagMot: null, comprovanteMot: null,
@@ -2451,12 +2784,22 @@ function calcFechamento(linhas, motoristas) {
 
 // ── Status ───────────────────────────────────────────────
 const FS = {
-  revisao:     { label: "Em Revisão",            cor: "#3b82f6" },
+  op:          { label: "Geração Operacional",   cor: "#3b82f6" },
   gest:        { label: "Aguard. Gestor",         cor: "#f59e0b" },
-  agr:         { label: "Aguard. Agregados",      cor: "#8b5cf6" },
-  fin:         { label: "Aguard. Pagamento",      cor: "#06b6d4" },
-  revisao_op:  { label: "Contestado",              cor: "#dc2626" },
+  fin:         { label: "Revisão Financeiro",     cor: "#06b6d4" },
+  agr:         { label: "Aguard. Agregado",       cor: "#8b5cf6" },
+  revisao_op:  { label: "Contestado",             cor: "#dc2626" },
   pago:        { label: "Pago ✓",                cor: "#10b981" },
+};
+
+// Etapa labels per motorista
+const MOT_ETAPA = {
+  op:         { label: "Geração Operacional", cor: "#3b82f6" },
+  gest:       { label: "Aguard. Gestor",      cor: "#f59e0b" },
+  fin:        { label: "Revisão Financeiro",  cor: "#06b6d4" },
+  agr:        { label: "Aguard. Ciência",     cor: "#8b5cf6" },
+  revisao_op: { label: "Contestado",          cor: "#dc2626" },
+  pago:       { label: "Pago ✓",             cor: "#10b981" },
 };
 
 // ── Exportar CSV ─────────────────────────────────────────
@@ -2542,7 +2885,10 @@ function MotoristasView({ motoristas, setMotoristas }) {
   };
   return (
     <div className="space-y-3">
-      <div className="flex justify-end"><Btn onClick={() => setShowNew(true)}><Plus size={14} />Novo Motorista</Btn></div>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <MotoristasBulkImportBtn setMotoristas={setMotoristas}/>
+        <Btn onClick={() => setShowNew(true)}><Plus size={14} />Novo Motorista</Btn>
+      </div>
       {motoristas.map(m => (
         <Card key={m.id} className={`p-4 ${!m.ativo ? "opacity-50" : ""}`}>
           <div className="flex items-start justify-between gap-4">
@@ -2904,7 +3250,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
     }));
     onSave({
       id: uid(), periodo, quinzena, descricao,
-      status: "revisao",
+      status: "op",
       criadoPor: user.id, criadoNome: user.name, criadoEm: now(),
       totalCTEs: totais.ctes, totalEntregas: totais.entregas,
       mots,
@@ -3191,41 +3537,37 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
   const hist = (acao, obs = "") => [...fec.hist, { acao, quem: user.name, ts: now(), obs }];
 
   const total = fec.mots.reduce((s, c) => s + c.totalBruto, 0);
-  const st = FS[fec.status] || FS.revisao;
+  const st = FS[fec.status] || FS.op;
 
   // Per-motorista individual permissions
   const isGestOrDir = ["area_manager","director"].includes(user.role);
   const isFinOrDir  = userHasFinancial(user) || user.role === "director";
 
-  const canSubmit = fec.status === "revisao" && ["operator","area_manager","director"].includes(user.role);
-  const canGest   = fec.status === "gest"    && isGestOrDir;
+  const canEditCTE  = (etapa) => ["op","gest","fin","revisao_op"].includes(etapa) && user.role !== "auditor";
+  const canOp       = (etapa) => (etapa === "op" || etapa === "revisao_op") && ["operator","area_manager","director"].includes(user.role);
+  const canGestAppr = (etapa) => etapa === "gest" && isGestOrDir;
+  const canFinAppr  = (etapa) => etapa === "fin"  && isFinOrDir;
+  const isAgrEtapa  = (etapa) => etapa === "agr";
 
-  // Counts per etapa for the action panel
-  const motsFin     = (fec.mots||[]).filter(c => c.etapa === "fin");
-  const hasAction   = canSubmit || canGest || (isFinOrDir && motsFin.length > 0);
-  const canCorr     = fec.status === "revisao" && user.role !== "auditor";
-
-  // Advance individual motorista etapa
-  const advanceMot = (motId, novaEtapa, obs = "") => {
-    const mots = fec.mots.map(c => c.id !== motId ? c : {
-      ...c,
-      etapa: novaEtapa,
-      statusGest: novaEtapa === "fin" ? "aprovado" : "devolvido",
-      comentarioGest: obs
-    });
-    const allPago = mots.every(c => c.etapa === "pago");
-    upd({ mots, status: allPago ? "pago" : fec.status, hist: hist(`Gestor ${novaEtapa === "fin" ? "aprovou" : "devolveu"} — ${fec.mots.find(c=>c.id===motId)?.nome}`, obs) });
+  // Overall fechamento status = derived from worst mot etapa
+  const getFecStatus = (mots) => {
+    if (mots.every(c => c.etapa === "pago")) return "pago";
+    if (mots.some(c => c.etapa === "revisao_op")) return "op";
+    if (mots.some(c => c.etapa === "op")) return "op";
+    if (mots.some(c => c.etapa === "gest")) return "gest";
+    if (mots.some(c => c.etapa === "fin")) return "fin";
+    if (mots.some(c => c.etapa === "agr")) return "agr";
+    return "op";
   };
 
-  const reenviaMot = (motId) => {
-    const mots = fec.mots.map(cc => cc.id !== motId ? cc : {
-      ...cc,
-      etapa: "agr",
-      statusAgr: "pendente",
-      comentarioAgr: "",
-      nf: null,  // limpa NF anterior para o agregado enviar nova
-    });
-    upd({ mots, hist: hist(`Reenvio ao agregado após correção — ${fec.mots.find(c=>c.id===motId)?.nome}`) });
+  const advanceMotTo = (motId, novaEtapa, obs = "") => {
+    const mots = fec.mots.map(c => c.id !== motId ? c : { ...c, etapa: novaEtapa, [`status_${novaEtapa}`]: "ok", [`obs_${novaEtapa}`]: obs });
+    upd({ mots, status: getFecStatus(mots), hist: hist(`→ ${MOT_ETAPA[novaEtapa]?.label||novaEtapa}`, `${fec.mots.find(c=>c.id===motId)?.nome}${obs?" — "+obs:""}`) });
+  };
+
+  const rejectMotTo = (motId, targetEtapa, obs = "") => {
+    const mots = fec.mots.map(c => c.id !== motId ? c : { ...c, etapa: targetEtapa, [`obs_reject_${targetEtapa}`]: obs });
+    upd({ mots, status: getFecStatus(mots), hist: hist(`Devolvido para ${MOT_ETAPA[targetEtapa]?.label}`, `${fec.mots.find(c=>c.id===motId)?.nome}${obs?" — "+obs:""}`) });
   };
 
   const pagarMot = async (motId, file, valorPago, motivoAjuste) => {
@@ -3301,48 +3643,27 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
         </div>
       )}
 
-      {/* Painel de ação */}
+      {/* Painel de status do fluxo */}
       {!["pago"].includes(fec.status) && (
-        <div className={`rounded-xl border-2 p-4 space-y-3 ${hasAction ? "border-amber-500/40 bg-amber-500/5" : "border-slate-700 bg-slate-800"}`}>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${hasAction ? "bg-amber-400 animate-pulse" : "bg-slate-600"}`} />
-              <p className="text-sm font-semibold text-slate-200">
-                {canSubmit ? `Pronto para enviar para ${user.role === "operator" ? "Gestor" : "Agregados"}` :
-                 canGest   ? "Aguardando sua aprovação — revise e libere para os agregados" :
-                 isFinOrDir && motsFin.length > 0 ? `${motsFin.length} motorista(s) aguardando pagamento` :
-                 fec.status === "agr" ? "Aguardando ciência dos agregados" :
-                 "Aguardando ações individuais"}
-              </p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {canSubmit && (
-                <Btn onClick={() => upd({ status: user.role === "operator" ? "gest" : "agr", hist: hist(user.role === "operator" ? "Enviado p/ gestor" : "Enviado p/ agregados") })}>
-                  <ChevronRight size={14} />Enviar para {user.role === "operator" ? "Gestor" : "Agregados"}
-                </Btn>
-              )}
-              {canGest && !showRej && (
-                <>
-                  <Btn variant="success" onClick={() => upd({ status: "agr", hist: hist("Aprovado pelo gestor → agregados") })}><Check size={14} />Aprovar → Agregados</Btn>
-                  <Btn variant="danger" onClick={() => setShowRej(true)}><X size={14} />Rejeitar</Btn>
-                </>
-              )}
-            </div>
+        <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"/>
+            <p className="text-sm font-semibold text-slate-200">
+              Fluxo: {FS[fec.status]?.label || "Em andamento"} — cada motorista segue seu próprio fluxo abaixo
+            </p>
           </div>
-          {showRej && (
-            <div className="space-y-2 pt-2 border-t border-slate-700">
-              <TA label="Motivo da rejeição *" rows={3} value={rejectTxt} onChange={e => setRejectTxt(e.target.value)} />
-              <div className="flex gap-2">
-                <Btn variant="danger" disabled={!rejectTxt.trim()} className="flex-1 justify-center"
-                  onClick={() => { upd({ status: "revisao", motivoRej: rejectTxt, hist: hist("Rejeitado", rejectTxt) }); setShowRej(false); setRejectTxt(""); }}>
-                  <X size={14} />Confirmar Rejeição
-                </Btn>
-                <Btn variant="ghost" onClick={() => { setShowRej(false); setRejectTxt(""); }}>Cancelar</Btn>
+          {/* Flow steps visual */}
+          <div className="flex items-center gap-1 flex-wrap text-xs">
+            {[["op","Operacional"],["gest","Gestor"],["fin","Financeiro"],["agr","Agregado"],["pago","Pago"]].map(([k,l],i,arr)=>(
+              <div key={k} className="flex items-center gap-1">
+                <span className={`px-2 py-1 rounded border font-medium ${fec.status===k?"bg-amber-500/20 border-amber-500/50 text-amber-300":"border-slate-700 text-slate-500"}`}>{l}</span>
+                {i<arr.length-1&&<ChevronRight size={10} className="text-slate-600"/>}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
+
       {fec.status === "pago" && (
         <div className="bg-emerald-500/5 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3">
           <CheckCircle2 size={20} className="text-emerald-400" />
@@ -3473,7 +3794,6 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                       </div>
                     </div>
                   )}
-                  {c.dataPagMot && <p className="text-xs text-emerald-400 mt-1">Pago em {fmtDate(c.dataPagMot)}</p>}
                   {c.correcoes.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {c.correcoes.map(cr => (
@@ -3481,7 +3801,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                           <div><p className="text-xs font-semibold text-blue-300">CTE: {cr.ncte}{cr.data?` · ${cr.data}`:""}</p><p className="text-xs text-slate-400">{cr.justificativa}</p></div>
                           <div className="flex items-center gap-2">
                             <span className={`text-sm font-bold ${cr.valor>=0?"text-emerald-400":"text-red-400"}`}>{cr.valor>=0?"+":""}{fmt(cr.valor)}</span>
-                            {canCorr && <button onClick={() => removeCorr(c.id, cr.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={12}/></button>}
+                            {canEditCTE(etapa) && <button onClick={() => removeCorr(c.id, cr.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={12}/></button>}
                           </div>
                         </div>
                       ))}
@@ -3490,13 +3810,48 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                 </div>
                 <div className="text-right flex-shrink-0 space-y-1.5">
                   <p className="text-xl font-bold text-emerald-400">{fmt(c.totalBruto)}</p>
-                  {canCorr && <Btn size="sm" variant="secondary" onClick={() => setShowCorr(c.id)}><Plus size={12}/>CTE Manual</Btn>}
 
-                  {(etapa === "revisao_op" || etapa === "devolvido") && user.role !== "auditor" && (
-                    <Btn size="sm" variant="blue" onClick={() => reenviaMot(c.id)}>
-                      <RefreshCw size={12}/>Reenviar ao Agregado
+                  {/* CTE Manual — disponível em op, gest, fin, revisao_op */}
+                  {canEditCTE(etapa) && (
+                    <Btn size="sm" variant="secondary" onClick={() => setShowCorr(c.id)}><Plus size={12}/>CTE Manual</Btn>
+                  )}
+
+                  {/* OP: Enviar para Gestor */}
+                  {canOp(etapa) && (
+                    <Btn size="sm" variant="blue" onClick={() => advanceMotTo(c.id, "gest")}>
+                      <Send size={12}/>Enviar ao Gestor
                     </Btn>
                   )}
+
+                  {/* GEST: Aprovar → Financeiro ou Devolver → Op */}
+                  {canGestAppr(etapa) && (
+                    <div className="flex flex-col gap-1">
+                      <Btn size="sm" variant="success" onClick={() => advanceMotTo(c.id, "fin")}>
+                        <Check size={12}/>Aprovar → Financeiro
+                      </Btn>
+                      <Btn size="sm" variant="danger" onClick={() => {
+                        const obs = window.prompt ? window.prompt("Motivo da devolução:") : ""; if (obs !== null) rejectMotTo(c.id, "op", obs||"");
+                      }}>
+                        <XIcon size={12}/>Devolver à Operação
+                      </Btn>
+                    </div>
+                  )}
+
+                  {/* FIN: Aprovar → Agregado ou Devolver → Gestor */}
+                  {canFinAppr(etapa) && (
+                    <div className="flex flex-col gap-1">
+                      <Btn size="sm" variant="success" onClick={() => advanceMotTo(c.id, "agr")}>
+                        <Check size={12}/>Aprovar → Agregado
+                      </Btn>
+                      <Btn size="sm" variant="danger" onClick={() => {
+                        const obs = window.prompt ? window.prompt("Motivo da devolução:") : ""; if (obs !== null) rejectMotTo(c.id, "gest", obs||"");
+                      }}>
+                        <XIcon size={12}/>Devolver ao Gestor
+                      </Btn>
+                    </div>
+                  )}
+
+                  {/* PAGO */}
                   {etapa === "fin" && isFinOrDir && (
                     <MotPagBtn mot={c} onPago={pagarMot}/>
                   )}
@@ -3810,7 +4165,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
               </div>
             )}
             {fechamentosFiltrados.map(f => {
-              const st = FS[f.status] || FS.revisao;
+              const st = FS[f.status] || FS.op;
               const total = (f.mots||[]).reduce((a, c) => a + c.totalBruto, 0);
               const pendAgr = (f.mots||[]).filter(c => (c.etapa||"agr") === "agr").length;
               // Highlight matching motoristas if filter active
@@ -3941,9 +4296,9 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
     let pago=0,aReceber=0,pendenteCiencia=0,contestado=0,totalPacotes=0,totalCTEs=0;
     meusFechamentos.forEach(({ fec, mot }) => {
       totalPacotes += mot.totalPacotes||0; totalCTEs += mot.totalCTEs||0;
-      if (fec.status==="pago") pago+=mot.totalBruto;
-      else if (mot.etapa==="fin"||mot.etapa==="rev_gestor") aReceber+=mot.totalBruto;
-      else if (mot.etapa==="agr") pendenteCiencia+=mot.totalBruto;
+      if (mot.etapa==="pago") pago+=mot.totalBruto;
+      else if (mot.etapa==="fin") aReceber+=mot.totalBruto;   // financeiro vai pagar
+      else if (mot.etapa==="agr") pendenteCiencia+=mot.totalBruto;  // aguardando minha ciência
       else if (mot.etapa==="revisao_op") contestado+=mot.totalBruto;
     });
     return { pago, aReceber, pendenteCiencia, contestado, totalPacotes, totalCTEs };
@@ -3954,14 +4309,17 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
       if (f.id !== fecId) return f;
       const mots = f.mots.map(c => {
         if (c.id !== motId) return c;
+        // Agregado aceita → vai para pagamento (financeiro paga com NF)
+        // Agregado contesta → volta para operacional revisar
         const newEtapa = patch.statusAgr === "aprovado" ? "fin" : "revisao_op";
         return { ...c, ...patch, etapa: newEtapa };
       });
-      const anyAgr  = mots.some(c => c.etapa==="agr");
-      const allPago = mots.every(c => c.etapa==="pago");
-      const status  = allPago ? "pago" : anyAgr ? "agr" : f.status;
+      const allPago = mots.every(c => c.etapa === "pago");
+      const anyRevOp = mots.some(c => c.etapa === "revisao_op");
+      const anyAgr  = mots.some(c => c.etapa === "agr");
+      const status  = allPago ? "pago" : anyRevOp ? "op" : anyAgr ? "agr" : f.status;
       const hist = [...f.hist, {
-        acao: patch.statusAgr==="aprovado" ? `Ciência dada — ${mCad?.nome||motMatricula}` : `Contestado — ${mCad?.nome||motMatricula}`,
+        acao: patch.statusAgr === "aprovado" ? `Agregado aceitou — ${mCad?.nome||motMatricula}` : `Agregado CONTESTOU — ${mCad?.nome||motMatricula}`,
         quem: mCad?.nome||motMatricula, ts: now(), obs: patch.comentarioAgr||""
       }];
       return { ...f, mots, status, hist };
@@ -4326,14 +4684,23 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
     });
   };
 
+  // Novo fluxo: fin = aprovado pelo agregado, aguardando pagamento financeiro
   const motsFin = fechamentos.flatMap(f=>
-    (f.mots||[]).filter(c=>(c.etapa||"agr")==="fin").map(c=>({fec:f,mot:c}))
+    (f.mots||[]).filter(c=>c.etapa==="fin").map(c=>({fec:f,mot:c}))
+  );
+  // Aguardando ciência do agregado
+  const motsAgr = fechamentos.flatMap(f=>
+    (f.mots||[]).filter(c=>c.etapa==="agr").map(c=>({fec:f,mot:c}))
   );
   const motsPago = fechamentos.flatMap(f=>
-    (f.mots||[]).filter(c=>(c.etapa||"agr")==="pago").map(c=>({fec:f,mot:c}))
+    (f.mots||[]).filter(c=>c.etapa==="pago").map(c=>({fec:f,mot:c}))
   );
   const motsContestados = fechamentos.flatMap(f=>
-    (f.mots||[]).filter(c=>c.etapa==="revisao_op"||c.etapa==="rev_gestor").map(c=>({fec:f,mot:c}))
+    (f.mots||[]).filter(c=>c.etapa==="revisao_op").map(c=>({fec:f,mot:c}))
+  );
+  // Em revisão interna (op, gest, fin_review)
+  const motsInternal = fechamentos.flatMap(f=>
+    (f.mots||[]).filter(c=>["op","gest"].includes(c.etapa)).map(c=>({fec:f,mot:c}))
   );
   const fecPagos = fechamentos.filter(f=>f.status==="pago");
   const totalFecPend = motsFin.reduce((s,x)=>s+x.mot.totalBruto,0);
@@ -4433,20 +4800,20 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="p-4 border-purple-500/20 bg-purple-500/5">
+          <p className="text-xs text-purple-400/70 mb-1">Aguard. Ciência Agregado</p>
+          <p className="text-xl font-bold text-purple-400">{fmt(motsAgr.reduce((s,x)=>s+x.mot.totalBruto,0))}</p>
+          <p className="text-xs text-purple-400/50 mt-0.5">{motsAgr.length} motorista(s)</p>
+        </Card>
         <Card className="p-4 border-amber-500/20 bg-amber-500/5">
-          <p className="text-xs text-amber-400/70 mb-1">Aguard. Pagamento</p>
+          <p className="text-xs text-amber-400/70 mb-1">Aguard. Pagamento Fin.</p>
           <p className="text-xl font-bold text-amber-400">{fmt(totalFecPend)}</p>
           <p className="text-xs text-amber-400/50 mt-0.5">{motsFin.length} motorista(s)</p>
         </Card>
         <Card className="p-4 border-red-500/20 bg-red-500/5">
           <p className="text-xs text-red-400/70 mb-1">Contestados</p>
           <p className="text-xl font-bold text-red-400">{motsContestados.length}</p>
-          <p className="text-xs text-red-400/50 mt-0.5">aguardando</p>
-        </Card>
-        <Card className="p-4 border-blue-500/20 bg-blue-500/5">
-          <p className="text-xs text-blue-400/70 mb-1">Tarefas a Pagar</p>
-          <p className="text-xl font-bold text-blue-400">{fmt(totalTaskPend)}</p>
-          <p className="text-xs text-blue-400/50 mt-0.5">{tasksPendPag.length} tarefa(s)</p>
+          <p className="text-xs text-red-400/50 mt-0.5">voltaram à operação</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-emerald-400/70 mb-1">Total Pago</p>
@@ -4458,9 +4825,11 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[
-          ["agregados",  `🚚 Aguard. Pagamento${motsFin.length>0?` (${motsFin.length})`:""}`,          motsFin.length>0],
-          ["contestados",`⚠ Contestados${motsContestados.length>0?` (${motsContestados.length})`:""}`, motsContestados.length>0],
-          ["tarefas",    `📋 Tarefas${tasksPendPag.length>0?` (${tasksPendPag.length})`:""}`,           tasksPendPag.length>0],
+          ["agr",        `🟣 Ciência Agregado${motsAgr.length>0?` (${motsAgr.length})`:""}`,              motsAgr.length>0],
+          ["agregados",  `💰 Pagar${motsFin.length>0?` (${motsFin.length})`:""}`,                        motsFin.length>0],
+          ["contestados",`⚠ Contestados${motsContestados.length>0?` (${motsContestados.length})`:""}`,   motsContestados.length>0],
+          ["internos",   `🔄 Em Revisão${motsInternal.length>0?` (${motsInternal.length})`:""}`,          motsInternal.length>0],
+          ["tarefas",    `📋 Tarefas${tasksPendPag.length>0?` (${tasksPendPag.length})`:""}`,              tasksPendPag.length>0],
           ["historico",  `✅ Histórico (${motsPago.length+tasksPagas.length})`, false],
         ].map(([v,l,hasPend])=>(
           <button key={v} onClick={()=>setTab(v)}
@@ -4499,6 +4868,141 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
           </div>
         </div>
       </div>
+
+      {/* AGR — Aguardando ciência do agregado */}
+      {tab === "agr" && (
+        <div className="space-y-3">
+          {motsAgr.length===0&&<div className="text-center py-10 text-slate-500">Nenhum motorista aguardando ciência do agregado.</div>}
+          {motsAgr.filter(({mot})=>matchesMot(mot)).map(({fec,mot})=>(
+            <Card key={mot.id} className="p-4 border-purple-500/20 bg-purple-500/5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <Badge color="#8b5cf6">Aguard. Ciência</Badge>
+                    <span className="text-xs text-slate-500">{fec.descricao} · {fec.periodo}</span>
+                  </div>
+                  <p className="font-semibold text-slate-100">{mot.nome} <span className="text-xs text-slate-500">Mat: {mot.mat}</span></p>
+                  <p className="text-xs text-slate-400 mt-0.5">{mot.totalCTEs} CTEs · {mot.diasUnicos} dia(s)</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xl font-bold text-purple-400">{fmt(mot.totalBruto)}</p>
+                  <p className="text-xs text-slate-500">Valor aprovado pelo financeiro</p>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* AGREGADOS — Pagar (etapa fin = agregado aceitou, aguardando pagamento) */}
+      {tab === "agregados" && (
+        <div className="space-y-3">
+          {motsFin.length===0&&<div className="text-center py-10 text-slate-500">Nenhum motorista aguardando pagamento.</div>}
+          {motsFin.filter(({mot})=>matchesMot(mot)).map(({fec,mot})=>(
+            <Card key={mot.id} className="p-4 border-amber-500/20 bg-amber-500/5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <Badge color="#f59e0b">Aguard. Pagamento</Badge>
+                    <span className="text-xs text-slate-500">{fec.descricao} · {fec.periodo}</span>
+                  </div>
+                  <p className="font-semibold text-slate-100">{mot.nome} <span className="text-xs text-slate-500">Mat: {mot.mat}</span></p>
+                  <p className="text-xs text-slate-400 mt-0.5">{mot.totalCTEs} CTEs · {mot.diasUnicos} dia(s)</p>
+                  {mot.nf&&<p className="text-xs text-blue-400 mt-1">📄 NF: {mot.nf.nome} <button onClick={()=>setViewFile(mot.nf)} className="underline ml-1">ver</button></p>}
+                </div>
+                <div className="text-right flex-shrink-0 space-y-2">
+                  <p className="text-xl font-bold text-amber-400">{fmt(mot.totalBruto)}</p>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* CONTESTADOS */}
+      {tab === "contestados" && (
+        <div className="space-y-3">
+          {motsContestados.length===0&&<div className="text-center py-10 text-slate-500">Nenhum motorista contestado.</div>}
+          {motsContestados.filter(({mot})=>matchesMot(mot)).map(({fec,mot})=>(
+            <Card key={mot.id} className="p-4 border-red-500/20 bg-red-500/5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <Badge color="#dc2626">Contestado</Badge>
+                    <span className="text-xs text-slate-500">{fec.descricao} · {fec.periodo}</span>
+                  </div>
+                  <p className="font-semibold text-slate-100">{mot.nome}</p>
+                  {mot.comentarioAgr&&<p className="text-xs text-red-300 mt-1">Motivo: {mot.comentarioAgr}</p>}
+                </div>
+                <p className="text-xl font-bold text-red-400 flex-shrink-0">{fmt(mot.totalBruto)}</p>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* INTERNOS — Em revisão operacional/gestor */}
+      {tab === "internos" && (
+        <div className="space-y-3">
+          {motsInternal.length===0&&<div className="text-center py-10 text-slate-500">Nenhum em revisão interna.</div>}
+          {motsInternal.map(({fec,mot})=>{
+            const etLabel = MOT_ETAPA[mot.etapa]||{label:mot.etapa,cor:"#64748b"};
+            return (
+              <Card key={mot.id} className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <Badge color={etLabel.cor}>{etLabel.label}</Badge>
+                      <span className="text-xs text-slate-500">{fec.descricao} · {fec.periodo}</span>
+                    </div>
+                    <p className="font-semibold text-slate-100">{mot.nome}</p>
+                  </div>
+                  <p className="text-xl font-bold text-slate-300 flex-shrink-0">{fmt(mot.totalBruto)}</p>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* TAREFAS */}
+      {tab === "tarefas" && (
+        <div className="space-y-3">
+          {tasksPendPag.length===0&&<div className="text-center py-10 text-slate-500">Nenhuma tarefa com custo pendente.</div>}
+          {tasksPendPag.map(t=>{
+            const total = t.costRationals.reduce((s,c)=>s+c.value,0);
+            const opener = users.find(u=>u.id===t.openedBy);
+            return (
+              <Card key={t.id} className="p-4 border-blue-500/20 bg-blue-500/5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <Badge color="#60a5fa">Tarefa</Badge>
+                      <span className="text-xs text-slate-500">{t.templateName}</span>
+                    </div>
+                    <p className="font-semibold text-slate-100">{t.title}</p>
+                    {opener&&<p className="text-xs text-slate-400 mt-0.5">Por: {opener.name}</p>}
+                    <div className="mt-2 space-y-0.5">
+                      {t.costRationals.map(c=>(
+                        <p key={c.id} className="text-xs text-slate-400">{c.description}: <span className="text-blue-400">{fmt(c.value)}</span></p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0 space-y-2">
+                    <p className="text-xl font-bold text-blue-400">{fmt(total)}</p>
+                    <label className="cursor-pointer">
+                      <Btn size="sm" variant="success" onClick={e=>{e.currentTarget.parentElement.querySelector('input').click()}}>
+                        <CreditCard size={12}/>Pagar
+                      </Btn>
+                      <input type="file" accept="image/*,.pdf" className="hidden" onChange={e=>pagarTask(t.id,e)}/>
+                    </label>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {tab === "historico" && (
         <div className="space-y-4">
@@ -4647,6 +5151,407 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
   );
 }
 
+// ─────────────────────────────────────────────
+// IMPORTAÇÃO EM MASSA DE MOTORISTAS
+// ─────────────────────────────────────────────
+function MotoristasBulkImportBtn({ setMotoristas }) {
+  const ref = useRef();
+  const [result, setResult] = useState(null);
+
+  const downloadTemplate = () => {
+    const cols = ["Nome","Matricula","CPF","Email","WhatsApp","TipoPagamento","ValorDiaria","ValorCTE"];
+    const ex   = ["João Silva","123456","111.222.333-44","joao@email.com","27999990001","ambos","80","1.50"];
+    const csv  = [cols.join(";"), ex.join(";")].join("\n");
+    const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a"); a.href=url; a.download="modelo_motoristas.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFile = e => {
+    const file = e.target.files?.[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target.result.replace(/^\uFEFF/,"");
+      const lines = text.split(/\r?\n/).filter(l=>l.trim());
+      const header = lines[0].split(/[;,\t]/);
+      const rows = lines.slice(1);
+      let added=0, errors=[];
+      const newMots = [];
+      rows.forEach((row,i) => {
+        const cols = row.split(/[;,\t]/);
+        const get = (name) => {
+          const idx = header.findIndex(h=>h.trim().toLowerCase()===name.toLowerCase());
+          return idx>=0 ? cols[idx]?.trim()||"" : "";
+        };
+        const nome = get("nome")||get("name");
+        const mat  = get("matricula")||get("matrícula")||get("matricula");
+        if (!nome||!mat) { errors.push(`Linha ${i+2}: nome ou matrícula vazios`); return; }
+        const tipo = get("tipopagamento")||get("tipo")||"ambos";
+        newMots.push({
+          id: uid(), nome, matricula: mat, cpf: get("cpf")||"", email: get("email")||"",
+          telefone: get("whatsapp")||get("telefone")||"",
+          tipoPagamento: tipo.toLowerCase().includes("diaria")?"diaria":tipo.toLowerCase().includes("cte")||tipo.toLowerCase().includes("pacote")?"pacote":"ambos",
+          valorDiaria: parseFloat(get("valordiaria")||"0")||0,
+          valorCTE: parseFloat(get("valorcte")||get("valorpacote")||"0")||0,
+          valorPacote: parseFloat(get("valorcte")||get("valorpacote")||"0")||0,
+          ativo: true,
+          codigoAcesso: `AGR-${nome.split(" ").map(p=>p[0]).join("").slice(0,3).toUpperCase()}-${Math.floor(1000+Math.random()*9000)}`
+        });
+        added++;
+      });
+      setMotoristas(p=>[...p,...newMots]);
+      setResult({added, errors});
+    };
+    reader.readAsText(file, "utf-8");
+    if(ref.current) ref.current.value="";
+  };
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Btn variant="secondary" size="sm" onClick={downloadTemplate}><Download size={13}/>Baixar Modelo CSV</Btn>
+      <Btn size="sm" onClick={()=>ref.current?.click()}><Upload size={13}/>Importar Motoristas</Btn>
+      <input ref={ref} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile}/>
+      {result&&(
+        <span className="text-xs text-emerald-400">{result.added} importado(s){result.errors.length>0?` | ${result.errors.length} erro(s)`:""}</span>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// FATURAMENTO JADLOG
+// ─────────────────────────────────────────────
+function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnidades, clients }) {
+  const [tab, setTab]         = useState("dashboard");
+  const [filtUnidade, setFiltUnidade] = useState("all");
+  const [filtQuinz, setFiltQuinz]   = useState("all");
+  const [filtMes, setFiltMes]       = useState("all");
+  const [showImport, setShowImport] = useState(false);
+  const [importing, setImporting]   = useState(false);
+  const [importMsg, setImportMsg]   = useState("");
+  const [newUnNome, setNewUnNome]   = useState("");
+  const [newUnCod, setNewUnCod]     = useState("");
+  const fileRef = useRef();
+
+  // Parse unit from header row of XLSX
+  const parseUnidade = (headerVal) => {
+    if (!headerVal) return { codigo:"", nome:"" };
+    const m = String(headerVal).match(/(\d+)[-–](.+)/);
+    return m ? { codigo: m[1].trim(), nome: m[2].trim() } : { codigo:"", nome: String(headerVal) };
+  };
+
+  const handleImport = async e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setImporting(true); setImportMsg("Lendo planilha...");
+    try {
+      const buf = await file.arrayBuffer();
+      const { read, utils } = window.XLSX || await import("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+      const wb  = read(buf);
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const raw = utils.sheet_to_json(ws, { header:1, defval:"" });
+
+      // Row 0: header with unidade
+      const headerRow = raw[0]||[];
+      let unidadeInfo = { codigo:"", nome:"" };
+      headerRow.forEach(cell => {
+        if (String(cell).includes("=>")) {
+          const parte = String(cell).replace("Unidade =>","").trim();
+          const m = parte.match(/^(\d+)[-–](.+)/);
+          if (m) unidadeInfo = { codigo:m[1].trim(), nome:m[2].trim() };
+          else unidadeInfo = { codigo:"", nome:parte };
+        }
+      });
+
+      // Row 2 (index 2): column headers
+      const cols = raw[2]||[];
+      const idx  = name => cols.findIndex(c => String(c).trim().toLowerCase() === name.toLowerCase());
+      const iCTE  = idx("CTE"); const iData = idx("Data"); const iCNPJ = idx("CNPJ");
+      const iFat  = idx("zFrapConrrent"); const iLiq = cols.lastIndexOf("Liquido") >= 0 ? cols.lastIndexOf("Liquido") : idx("Liquido");
+
+      // Auto-add/find unit
+      let unidadeId = "";
+      const existing = unidades.find(u => u.codigo === unidadeInfo.codigo);
+      if (existing) {
+        unidadeId = existing.id;
+      } else if (unidadeInfo.codigo) {
+        const newU = { id:uid(), codigo:unidadeInfo.codigo, nome:unidadeInfo.nome };
+        setUnidades(p=>[...p, newU]);
+        unidadeId = newU.id;
+      }
+
+      // Parse data rows (from index 3)
+      const rows = [];
+      for (let r=3; r<raw.length; r++) {
+        const row = raw[r];
+        if (!row[iCTE]) continue;
+        const cte      = String(row[iCTE]||"").trim();
+        const data     = String(row[iData]||"").trim();
+        const cnpj     = String(row[iCNPJ]||"").replace(/\D/g,"").replace(/^0+/,"");
+        const fatBruto = Math.abs(parseFloat(row[iFat])||0);
+        const comissao = Math.abs(parseFloat(row[iLiq])||0);
+        if (!cte || !data) continue;
+        // Parse date dd/mm/yyyy → month/year/quinzena
+        const parts = data.split("/");
+        const dia   = parseInt(parts[0])||0;
+        const mes   = parseInt(parts[1])||0;
+        const ano   = parseInt(parts[2])||0;
+        const quinz = dia<=15 ? 1 : 2;
+        rows.push({ id:uid(), cte, data, dia, mes, ano, quinz, cnpj, fatBruto, comissao, unidadeId });
+      }
+
+      // Store as one import batch
+      const batch = { id:uid(), importadoEm:now(), arquivo:file.name, unidadeId, unidadeNome:unidadeInfo.nome, rows };
+      setFaturamentos(p=>[...p, batch]);
+      setImportMsg(`✅ ${rows.length} CTEs importados | Unidade: ${unidadeInfo.nome||"—"}`);
+    } catch(err) {
+      setImportMsg("❌ Erro: " + err.message);
+    }
+    setImporting(false);
+    if(fileRef.current) fileRef.current.value="";
+  };
+
+  // Flatten all rows with filters
+  const allRows = faturamentos.flatMap(b => b.rows.map(r=>({...r, batchId:b.id, batchFile:b.arquivo})));
+
+  const filteredRows = allRows.filter(r => {
+    if (filtUnidade!=="all" && r.unidadeId!==filtUnidade) return false;
+    if (filtMes!=="all" && String(r.mes)!==filtMes) return false;
+    if (filtQuinz!=="all" && String(r.quinz)!==filtQuinz) return false;
+    return true;
+  });
+
+  // Match CNPJ → client
+  const matchClient = cnpj => clients.find(c => (c.cnpj||"").replace(/\D/g,"").replace(/^0+/,"") === cnpj.replace(/^0+/,""));
+
+  // KPIs
+  const totalFat   = filteredRows.reduce((s,r)=>s+r.fatBruto,0);
+  const totalCom   = filteredRows.reduce((s,r)=>s+r.comissao,0);
+  const totalCTEs  = filteredRows.length;
+  const margem     = totalFat>0 ? (totalCom/totalFat*100) : 0;
+  const freteMedio = totalCTEs>0 ? totalFat/totalCTEs : 0;
+
+  // By client
+  const byClient = {};
+  filteredRows.forEach(r=>{
+    const cl = matchClient(r.cnpj);
+    const k  = cl ? cl.id : r.cnpj;
+    const nm = cl ? cl.code||cl.name : `CNPJ ${r.cnpj}`;
+    if (!byClient[k]) byClient[k] = {nome:nm, fat:0, com:0, ctes:0, matched:!!cl};
+    byClient[k].fat  += r.fatBruto;
+    byClient[k].com  += r.comissao;
+    byClient[k].ctes += 1;
+  });
+
+  // By quinzena/mes
+  const byPeriod = {};
+  filteredRows.forEach(r=>{
+    const k = `${r.ano}/${String(r.mes).padStart(2,"0")} Q${r.quinz}`;
+    if (!byPeriod[k]) byPeriod[k] = {label:k, fat:0, com:0, ctes:0};
+    byPeriod[k].fat  += r.fatBruto;
+    byPeriod[k].com  += r.comissao;
+    byPeriod[k].ctes += 1;
+  });
+
+  const meses = [...new Set(allRows.map(r=>r.mes))].filter(Boolean).sort();
+  const MONTHS = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div><h1 className="text-xl font-bold text-slate-100">Faturamento Jadlog</h1>
+          <p className="text-sm text-slate-400">{totalCTEs.toLocaleString("pt-BR")} CTEs importados</p></div>
+        <div className="flex items-center gap-2">
+          <Btn onClick={()=>fileRef.current?.click()} disabled={importing}>
+            <Upload size={14}/>{importing?"Importando...":"Importar Planilha"}
+          </Btn>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport}/>
+        </div>
+      </div>
+      {importMsg&&<div className={`text-xs px-3 py-2 rounded-lg border ${importMsg.startsWith("✅")?"bg-emerald-500/10 border-emerald-500/30 text-emerald-300":"bg-red-500/10 border-red-500/30 text-red-300"}`}>{importMsg}</div>}
+
+      {/* Filtros */}
+      <div className="flex gap-3 flex-wrap items-center">
+        <select value={filtUnidade} onChange={e=>setFiltUnidade(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+          <option value="all">Todas as Unidades</option>
+          {unidades.map(u=><option key={u.id} value={u.id}>{u.codigo} – {u.nome}</option>)}
+        </select>
+        <select value={filtMes} onChange={e=>setFiltMes(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+          <option value="all">Todos os Meses</option>
+          {meses.map(m=><option key={m} value={m}>{MONTHS[m]}</option>)}
+        </select>
+        <select value={filtQuinz} onChange={e=>setFiltQuinz(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+          <option value="all">Ambas Quinzenas</option>
+          <option value="1">1ª Quinzena (1–15)</option>
+          <option value="2">2ª Quinzena (16–31)</option>
+        </select>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {[["dashboard","📊 Dashboard"],["clientes","🤝 Por Cliente"],["periodo","📅 Por Período"],["unidades","🏢 Unidades"],["ctes","📋 CTEs"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setTab(v)}
+            className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+        ))}
+      </div>
+
+      {/* DASHBOARD */}
+      {tab==="dashboard"&&(
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <KpiCard label="CTEs" value={totalCTEs.toLocaleString("pt-BR")} icon={BarChart2} color="#60a5fa"/>
+            <KpiCard label="Faturamento" value={fmt(totalFat)} sub="zFrapConrrent" icon={Wallet} color="#10b981"/>
+            <KpiCard label="Comissão" value={fmt(totalCom)} sub="Liquido" icon={DollarSign} color="#f59e0b"/>
+            <KpiCard label="Margem" value={`${margem.toFixed(1)}%`} sub="Comissão/Fat" icon={TrendingUp} color={margem>10?"#10b981":"#ef4444"}/>
+            <KpiCard label="Frete Médio/CTE" value={fmt(freteMedio)} sub="Fat÷CTEs" icon={Truck} color="#8b5cf6"/>
+          </div>
+          {/* Bar chart por período */}
+          {Object.keys(byPeriod).length>0&&(
+            <Card className="p-5">
+              <h3 className="text-sm font-bold text-slate-300 mb-4">Faturamento × Comissão por Período (R$ mil)</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={Object.values(byPeriod).sort((a,b)=>a.label.localeCompare(b.label))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
+                  <XAxis dataKey="label" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}}/>
+                  <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
+                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>`R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:2})}`}/>
+                  <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
+                  <Bar dataKey="fat" name="Faturamento" fill="#10b981" radius={[4,4,0,0]}/>
+                  <Bar dataKey="com" name="Comissão" fill="#f59e0b" radius={[4,4,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* POR CLIENTE */}
+      {tab==="clientes"&&(
+        <div className="space-y-3">
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300">
+            💡 Para casar automaticamente, cadastre o CNPJ do cliente em Administração → Clientes.
+          </div>
+          {Object.entries(byClient).sort((a,b)=>b[1].fat-a[1].fat).map(([k,c])=>{
+            const m = c.fat>0?c.com/c.fat*100:0;
+            return (
+              <Card key={k} className="p-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${c.matched?"bg-emerald-400":"bg-amber-400"}`}/>
+                    <div>
+                      <p className="font-semibold text-slate-100 text-sm">{c.nome}</p>
+                      <p className="text-xs text-slate-500">{c.ctes.toLocaleString()} CTEs{!c.matched?" · CNPJ sem cadastro":""}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-5 text-right">
+                    <div><p className="text-xs text-slate-500">Faturamento</p><p className="text-sm font-bold text-emerald-400">{fmt(c.fat)}</p></div>
+                    <div><p className="text-xs text-slate-500">Comissão</p><p className="text-sm font-bold text-amber-400">{fmt(c.com)}</p></div>
+                    <div><p className="text-xs text-slate-500">Margem</p><p className={`text-sm font-bold ${m>10?"text-emerald-400":"text-red-400"}`}>{m.toFixed(1)}%</p></div>
+                    <div><p className="text-xs text-slate-500">Frete Médio</p><p className="text-sm font-bold text-slate-300">{fmt(c.fat/c.ctes)}</p></div>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* POR PERÍODO */}
+      {tab==="periodo"&&(
+        <div className="space-y-3">
+          {Object.entries(byPeriod).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,p])=>{
+            const m = p.fat>0?p.com/p.fat*100:0;
+            return (
+              <Card key={k} className="p-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div><p className="font-semibold text-slate-100">{p.label}</p><p className="text-xs text-slate-500">{p.ctes.toLocaleString()} CTEs</p></div>
+                  <div className="flex gap-5 text-right">
+                    <div><p className="text-xs text-slate-500">Faturamento</p><p className="text-sm font-bold text-emerald-400">{fmt(p.fat)}</p></div>
+                    <div><p className="text-xs text-slate-500">Comissão</p><p className="text-sm font-bold text-amber-400">{fmt(p.com)}</p></div>
+                    <div><p className="text-xs text-slate-500">Margem</p><p className={`text-sm font-bold ${m>10?"text-emerald-400":"text-red-400"}`}>{m.toFixed(1)}%</p></div>
+                    <div><p className="text-xs text-slate-500">Frete Médio</p><p className="text-sm font-bold text-slate-300">{fmt(p.fat/p.ctes)}</p></div>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+          {Object.keys(byPeriod).length===0&&<p className="text-slate-500 text-sm text-center py-10">Nenhum dado importado ainda.</p>}
+        </div>
+      )}
+
+      {/* UNIDADES */}
+      {tab==="unidades"&&(
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <input value={newUnCod} onChange={e=>setNewUnCod(e.target.value)} placeholder="Código (ex: 000001596)"
+              className="w-36 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+            <input value={newUnNome} onChange={e=>setNewUnNome(e.target.value)} placeholder="Nome da unidade"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+            <Btn onClick={()=>{ if(!newUnNome.trim()) return; setUnidades(p=>[...p,{id:uid(),codigo:newUnCod.trim(),nome:newUnNome.trim()}]); setNewUnNome(""); setNewUnCod(""); }} disabled={!newUnNome.trim()}>
+              <Plus size={14}/>Criar
+            </Btn>
+          </div>
+          {unidades.map(u=>{
+            const rows = allRows.filter(r=>r.unidadeId===u.id);
+            const fat  = rows.reduce((s,r)=>s+r.fatBruto,0);
+            const com  = rows.reduce((s,r)=>s+r.comissao,0);
+            return (
+              <Card key={u.id} className="p-4 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-semibold text-slate-100">{u.codigo} – {u.nome}</p>
+                  <p className="text-xs text-slate-500">{rows.length.toLocaleString()} CTEs</p>
+                </div>
+                <div className="flex gap-5 text-right">
+                  <div><p className="text-xs text-slate-500">Faturamento</p><p className="text-sm font-bold text-emerald-400">{fmt(fat)}</p></div>
+                  <div><p className="text-xs text-slate-500">Comissão</p><p className="text-sm font-bold text-amber-400">{fmt(com)}</p></div>
+                  <div><p className="text-xs text-slate-500">Margem</p><p className="text-sm font-bold text-slate-300">{fat>0?(com/fat*100).toFixed(1):0}%</p></div>
+                </div>
+                <button onClick={()=>setUnidades(p=>p.filter(x=>x.id!==u.id))} className="text-slate-600 hover:text-red-400"><Trash2 size={14}/></button>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* CTEs */}
+      {tab==="ctes"&&(
+        <div className="space-y-2">
+          <p className="text-xs text-slate-400">{filteredRows.length.toLocaleString()} CTEs exibidos</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-slate-700">
+                {["CTE","Data","CNPJ/Cliente","Faturamento","Comissão","Margem"].map(h=>(
+                  <th key={h} className="text-left py-2 px-3 text-slate-400 font-semibold">{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {filteredRows.slice(0,200).map(r=>{
+                  const cl = matchClient(r.cnpj);
+                  const m  = r.fatBruto>0?r.comissao/r.fatBruto*100:0;
+                  return (
+                    <tr key={r.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                      <td className="py-1.5 px-3 font-mono text-slate-300">{r.cte}</td>
+                      <td className="py-1.5 px-3 text-slate-400">{r.data}</td>
+                      <td className="py-1.5 px-3">{cl?<span className="text-emerald-400">{cl.code||cl.name}</span>:<span className="text-amber-400">{r.cnpj}</span>}</td>
+                      <td className="py-1.5 px-3 text-right text-emerald-400">{fmt(r.fatBruto)}</td>
+                      <td className="py-1.5 px-3 text-right text-amber-400">{fmt(r.comissao)}</td>
+                      <td className="py-1.5 px-3 text-right">{m.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredRows.length>200&&<p className="text-xs text-slate-500 text-center py-3">Exibindo 200 de {filteredRows.length.toLocaleString()} CTEs</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default function OpsControl() {
   const [portalMode, setPortalMode] = useState(null);
@@ -4732,7 +5637,7 @@ export default function OpsControl() {
   const [view, setView] = useState("dashboard");
   const [openTaskId, setOpenTaskId] = useState(null);
 
-  const [areas]    = useLS("areas",    SEED.areas);
+  const [areas, setAreas] = useLS("areas", SEED.areas);
   const [users, setUsers]         = useLS("users",         SEED.users);
   const [clients, setClients]     = useLS("clients",       SEED.clients);
   const [templates, setTemplates] = useLS("taskTemplates", SEED.taskTemplates);
@@ -4743,6 +5648,9 @@ export default function OpsControl() {
   const [forecastEntries, setForecastEntries] = useLS("forecastEntries", SEED.forecastEntries);
   const [motoristas, setMotoristas] = useLS("motoristas", SEED.motoristas);
   const [fechamentos, setFechamentos] = useLS("fechamentos", SEED.fechamentos);
+  const [unidades, setUnidades] = useLS("unidades", SEED.unidades);
+  const [faturamentosJadlog, setFaturamentosJadlog] = useLS("faturamentosJadlog", SEED.faturamentosJadlog);
+  const [acrescimos, setAcrescimos] = useLS("acrescimos", []);
 
   const navigateToTask = id => { setOpenTaskId(id); setView("tasks"); };
 
@@ -4874,17 +5782,18 @@ export default function OpsControl() {
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden" style={{fontFamily:"'IBM Plex Sans',sans-serif"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;}`}</style>
-      <Sidebar user={liveUser} view={view} setView={setView} onLogout={()=>{setCurrentUser(null);setView("dashboard");}} areas={areas}/>
+      <Sidebar user={liveUser} view={view} setView={setView} onLogout={()=>{setCurrentUser(null);setView("dashboard");}} areas={areas} setUsers={setUsers} users={users} tasks={tasks}/>
       <main className="flex-1 overflow-y-auto">
         {view==="dashboard"&&<DashboardView user={liveUser} tasks={tasks} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} clients={clients} templates={templates} areas={areas} setView={setView} onOpenTask={navigateToTask}/>}
         {view==="tasks"&&<TasksView user={liveUser} tasks={tasks} setTasks={setTasks} templates={templates} setTemplates={setTemplates} clients={clients} areas={areas} users={users} initialOpenId={openTaskId} onClearOpenId={()=>setOpenTaskId(null)}/>}
         {view==="costs"&&hasF&&<CostsView user={liveUser} fixedCosts={fixedCosts} setFixedCosts={setFixedCosts} costEntries={costEntries} setCostEntries={setCostEntries} clients={clients}/>}
-        {view==="revenue"&&hasF&&<RevenueView user={liveUser} revenues={revenues} setRevenues={setRevenues} clients={clients}/>}
-        {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks}/>}
-        {view==="forecast"&&hasF&&<ForecastView clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries}/>}
+        {view==="revenue"&&hasF&&<RevenueView user={liveUser} acrescimos={acrescimos} setAcrescimos={setAcrescimos} clients={clients} faturamentosJadlog={faturamentosJadlog}/>}
+        {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
+        {view==="forecast"&&hasF&&<ForecastView clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
         {view==="fechamento"&&<FechamentoView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} motoristas={motoristas} setMotoristas={setMotoristas}/>}
+        {view==="fatjadlog"&&hasF&&<FatJadlogView user={liveUser} faturamentos={faturamentosJadlog} setFaturamentos={setFaturamentosJadlog} unidades={unidades} setUnidades={setUnidades} clients={clients}/>}
         {view==="pagamentos"&&hasF&&<PagamentosView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} tasks={tasks} setTasks={setTasks} users={users} clients={clients} motoristas={motoristas}/>}
-        {view==="admin"&&liveUser.role==="director"&&<AdminView areas={areas} users={users} setUsers={setUsers} clients={clients} setClients={setClients} templates={templates} setTemplates={setTemplates}/>}
+        {view==="admin"&&liveUser.role==="director"&&<AdminView areas={areas} setAreas={setAreas} users={users} setUsers={setUsers} clients={clients} setClients={setClients} templates={templates} setTemplates={setTemplates}/>}
         {(["costs","revenue","profitability","forecast","pagamentos"].includes(view)&&!hasF)&&(
           <div className="p-6 flex items-center justify-center h-full">
             <Card className="p-10 text-center max-w-sm">
