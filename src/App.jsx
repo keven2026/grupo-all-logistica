@@ -366,6 +366,7 @@ const KpiCard = ({ label, value, sub, icon:Icon, color="#DC1426", compact }) => 
 // ─────────────────────────────────────────────
 const userHasFinancial  = u => u.role === "director" || u.role === "auditor" || u.financialAccess === true;
 const userHasFechamento = u => u.role === "director" || u.fechamentoAccess === true;
+const userHasDRE        = u => u.role === "director" || u.dreAccess === true;
 const userAreaIds = u => u.areaIds || [];
 const userCanSeeTask = (u, task, templates) => {
   if (u.role === "director" || u.role === "auditor") return true;
@@ -2183,6 +2184,7 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
   const deleteTemplate=id=>setTemplates(p=>p.filter(t=>t.id!==id));
   const toggleFinancial  = id => setUsers(p=>p.map(u=>u.id===id?{...u,financialAccess:!u.financialAccess}:u));
   const toggleFechamento = id => setUsers(p=>p.map(u=>u.id===id?{...u,fechamentoAccess:!u.fechamentoAccess}:u));
+  const toggleDRE        = id => setUsers(p=>p.map(u=>u.id===id?{...u,dreAccess:!u.dreAccess}:u));
   const saveTemplate=tpl=>{
     if(editingTemplate==="new") setTemplates(p=>[...p,{...tpl,id:uid()}]);
     else setTemplates(p=>p.map(t=>t.id===editingTemplate.id?{...tpl,id:t.id}:t));
@@ -2243,6 +2245,7 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300 space-y-1">
             <p><span className="font-semibold">💰 Acesso Financeiro</span> — Custos, Faturamento, Rentabilidade e Pagamentos. Diretores e Auditores sempre têm.</p>
             <p><span className="font-semibold">🚚 Acesso Fechamento</span> — Módulo de Fechamento de Entregas e cadastro de Motoristas. Diretores sempre têm.</p>
+            <p><span className="font-semibold">📊 Acesso DRE</span> — Aba DRE dentro do Fechamento (Saldo Financeiro). Restrito por padrão. Diretores sempre têm.</p>
           </div>
           {users.map(u=>{
             const userAreas=areas.filter(a=>u.areaIds?.includes(a.id)).map(a=>a.name).join(", ");
@@ -2274,6 +2277,12 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
                       <button onClick={()=>toggleFechamento(u.id)}
                         className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all ${userHasFechamento(u)?"border-blue-500/30 text-blue-400 bg-blue-500/10 hover:bg-blue-500/20":"border-slate-600 text-slate-500 hover:border-slate-400"}`}>
                         {userHasFechamento(u)?"🚚 Revogar Fech.":"🚚 Liberar Fech."}
+                      </button>
+                    )}
+                    {u.role!=="director"&&(
+                      <button onClick={()=>toggleDRE(u.id)}
+                        className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all ${userHasDRE(u)?"border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20":"border-slate-600 text-slate-500 hover:border-slate-400"}`}>
+                        {userHasDRE(u)?"📊 Revogar DRE":"📊 Liberar DRE"}
                       </button>
                     )}
                     <button onClick={()=>deleteUser(u.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={14}/></button>
@@ -4073,7 +4082,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       <div className="flex gap-2 flex-wrap">
         {[["resumo","📊 Resumo"],["mots","🚚 Por Motorista"],["ctes","📋 CTEs de Entrega"],
           ["receita","📎 Planilhas & Receita"],
-          ...(isGestOrDir ? [["financeiro","💰 Saldo Financeiro"]] : []),
+          ...(userHasDRE(user) ? [["financeiro","💰 Saldo Financeiro"]] : []),
           ["links","🔗 Links Agregados"],["hist","📜 Histórico"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab === v ? "bg-red-600 text-white border-red-600" : "bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
@@ -4829,7 +4838,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
         <div className="flex gap-2 flex-wrap">
           {userHasFechamento(user) && (
             <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
-              {[["lista","📋 Fechamentos"],["mots","🚚 Motoristas"],["dre","📊 DRE"]].map(([v,l])=>(
+              {[["lista","📋 Fechamentos"],["mots","🚚 Motoristas"],...(userHasDRE(user)?[["dre","📊 DRE"]]:[])].map(([v,l])=>(
                 <button key={v} onClick={()=>setSubView(v)}
                   className={`px-3 py-1.5 font-semibold transition-all ${subView===v?"bg-red-600 text-white":"bg-slate-800 text-slate-400 hover:text-slate-200"}`}>{l}</button>
               ))}
@@ -4842,7 +4851,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
       </div>
 
       {subView === "mots" && <MotoristasView motoristas={motoristas} setMotoristas={setMotoristas} />}
-      {subView === "dre"  && <DreFechamento fechamentos={fechamentos} motoristas={motoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
+      {subView === "dre" && userHasDRE(user) && <DreFechamento fechamentos={fechamentos} motoristas={motoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
 
       {subView === "lista" && (
         <>
