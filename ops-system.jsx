@@ -3340,6 +3340,11 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
         valorFaturado: Number(r.TaxaEntrega || r.Valor || r.ValorFaturado || r.ValorCTE || r.Faturado || 0) || 0,
       }));
 
+      // ── Total Taxa de Entrega = soma DIRETA da coluna (não recalculada por motorista) ──
+      const totalTaxaEntregaColuna = linhas
+        .filter(r => r.evento === "entrega" && r.valorFaturado > 0)
+        .reduce((s,r) => s + r.valorFaturado, 0);
+
       // ── Detect duplicates ──────────────────────────────
       const dupesFound = [];
       linhas.forEach(r => {
@@ -3362,7 +3367,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       const linhasCalc = linhasSemDupe.map(r => r._duplicado ? { ...r, evento: "duplicado" } : r);
 
       const resultado = calcFechamento(linhasCalc, motoristas);
-      setCalc({ ...resultado, linhasOriginais: linhas, linhasCalc });
+      setCalc({ ...resultado, linhasOriginais: linhas, linhasCalc, totalTaxaEntrega: totalTaxaEntregaColuna });
       setTotais({
         ctes: linhas.length,
         entregas: linhas.filter(l => l.evento === "entrega").length,
@@ -3406,6 +3411,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       status: "op",
       criadoPor: user.id, criadoNome: user.name, criadoEm: now(),
       totalCTEs: totais.ctes, totalEntregas: totais.entregas,
+      totalTaxaEntrega: calc.totalTaxaEntrega || 0,
       mots,
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
@@ -3765,11 +3771,11 @@ function ReceitaFechamento({ fec, upd }) {
   const planilhaCom    = fec.planilhaJadlog  || null;     // 2. Comissão (planilha)
   const comissao       = planilhaCom?.totalCom || 0;
 
-  // 3. Taxa de Entrega = totalFaturado calculado na planilha do fechamento (motoristas)
-  //    = soma do valorFaturado de todos os CTEs (cadastrados + sem cadastro)
+  // 3. Taxa de Entrega = soma DIRETA da coluna TaxaEntrega (guardada no import)
+  //    sem multiplicação por volume. Sem cadastro entra na receita, só não tem desconto.
+  const taxaEntrega    = fec.totalTaxaEntrega || 0;
   const taxaEntregaCad = (fec.mots||[]).reduce((s,c)=>s+(c.totalFaturado||0), 0);
   const taxaEntregaNok = (fec.nok||[]).reduce((s,n)=>s+(n.totalFaturado||0), 0);
-  const taxaEntrega    = taxaEntregaCad + taxaEntregaNok; // total da planilha de entregas
 
   const totalReceita   = tde + comissao + taxaEntrega;
 
@@ -3874,14 +3880,15 @@ function ReceitaFechamento({ fec, upd }) {
       <Card className="p-4">
         <div className="mb-2">
           <p className="text-sm font-bold text-slate-200">3. Taxa de Entrega</p>
-          <p className="text-xs text-slate-400">Calculado automaticamente da planilha de CTEs importada no fechamento</p>
+          <p className="text-xs text-slate-400">Soma direta da coluna <span className="text-amber-400">TaxaEntrega</span> da planilha importada</p>
         </div>
         <div className="bg-slate-900 rounded-lg p-3 border border-slate-700 text-xs">
           <div className="flex gap-5 flex-wrap">
-            <div><p className="text-slate-500">Cadastrados</p><p className="text-emerald-400 font-bold">{fmt(taxaEntregaCad)}</p></div>
-            <div><p className="text-slate-500">Sem cadastro</p><p className="text-amber-400 font-bold">{fmt(taxaEntregaNok)}<span className="text-slate-500 ml-1">(entra receita, não sai despesa)</span></p></div>
-            <div><p className="text-slate-500">Total</p><p className="text-emerald-400 font-bold">{fmt(taxaEntrega)}</p></div>
+            <div><p className="text-slate-500">Total coluna</p><p className="text-emerald-400 font-bold text-sm">{fmt(taxaEntrega)}</p></div>
+            <div><p className="text-slate-500">↳ Cadastrados</p><p className="text-slate-300">{fmt(taxaEntregaCad)}</p></div>
+            <div><p className="text-slate-500">↳ Sem cadastro</p><p className="text-amber-400">{fmt(taxaEntregaNok)} <span className="text-slate-500">(entra receita, sem desconto)</span></p></div>
           </div>
+          {!taxaEntrega&&<p className="text-slate-500 text-xs mt-2">Valor calculado após importar a planilha de fechamento.</p>}
         </div>
       </Card>
 
@@ -4341,9 +4348,9 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
         // ── 3 entradas do fechamento ──
         const tde           = fec.tde             || 0;
         const comissao      = fec.planilhaJadlog?.totalCom || 0;
+        const taxaEntrega   = fec.totalTaxaEntrega || 0;
         const taxaEntregaCad= (fec.mots||[]).reduce((s,c)=>s+(c.totalFaturado||0), 0);
         const taxaEntregaNok= (fec.nok||[]).reduce((s,n)=>s+(n.totalFaturado||0), 0);
-        const taxaEntrega   = taxaEntregaCad + taxaEntregaNok;
         const totalReceita  = tde + comissao + taxaEntrega;
         // Sem cadastro: entra receita, não sai despesa
         const custoAgrCad   = fec.mots.reduce((s,c)=>s+(c.totalBruto||0),0);
