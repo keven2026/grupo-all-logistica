@@ -4480,7 +4480,13 @@ function DreFechamento({ fechamentos, motoristas, dreEntradas, setDreEntradas, f
   };
 
   // Taxas de entrega (soma dos fechamentos)
-  const getTaxas = () => (fechamentos||[]).reduce((s,f)=>s+(f.taxasEntregas||0),0);
+  // Taxa de Entrega = soma direta da coluna (guardada no import por fechamento)
+  const getTaxaEntrega = () =>
+    (fechamentos||[]).reduce((s,f) => s + (f.totalTaxaEntrega || 0), 0);
+
+  // TDE = lançamento manual por fechamento
+  const getTDE = () =>
+    (fechamentos||[]).reduce((s,f) => s + (f.tde || 0), 0);
 
   // Agregados cadastrados — custo total do fechamento (totalBruto de todos os motoristas calculados)
   // Bate exatamente com o total do fechamento
@@ -4522,9 +4528,10 @@ function DreFechamento({ fechamentos, motoristas, dreEntradas, setDreEntradas, f
   const q = filtQuin || null;
   const receitaJadlog      = getJadlog(q);
   const receitaAllEntregas = getComAllEntregas(q);
-  const receitaTaxas       = getTaxas();
+  const receitaTaxaEntrega = getTaxaEntrega();
+  const receitaTDE         = getTDE();
   const receitaAgrCasa     = getAgrCasa();
-  const totalReceita       = receitaJadlog + receitaAllEntregas + receitaTaxas;
+  const totalReceita       = receitaJadlog + receitaAllEntregas + receitaTaxaEntrega + receitaTDE;
 
   // Custos por categoria
   const custos = {};
@@ -4572,7 +4579,7 @@ function DreFechamento({ fechamentos, motoristas, dreEntradas, setDreEntradas, f
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard compact label={"Comissão Jadlog"} value={fmt(receitaJadlog)} icon={Wallet} color="#10b981"/>
+        <KpiCard compact label="Total Receita" value={fmt(totalReceita)} icon={Wallet} color="#10b981"/>
         <KpiCard compact label="Total Custos" value={fmt(totalCustos)} icon={DollarSign} color="#ef4444"/>
         <KpiCard compact label="Resultado" value={fmt(resultado)} icon={TrendingUp} color={resultado>=0?"#10b981":"#ef4444"}/>
         <KpiCard compact label="Margem" value={margem.toFixed(1)+"%"} icon={BarChart2} color={margem>=10?"#10b981":margem>=0?"#f59e0b":"#ef4444"}/>
@@ -4594,10 +4601,16 @@ function DreFechamento({ fechamentos, motoristas, dreEntradas, setDreEntradas, f
                 <span className="text-emerald-400 font-semibold">{fmt(receitaAllEntregas)}</span>
               </div>
             )}
-            {receitaTaxas>0&&(
+            {receitaTaxaEntrega>0&&(
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-300">Taxas de Entrega</span>
-                <span className="text-emerald-400 font-semibold">{fmt(receitaTaxas)}</span>
+                <span className="text-slate-300">Taxa de Entrega</span>
+                <span className="text-emerald-400 font-semibold">{fmt(receitaTaxaEntrega)}</span>
+              </div>
+            )}
+            {receitaTDE>0&&(
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-300">TDE</span>
+                <span className="text-emerald-400 font-semibold">{fmt(receitaTDE)}</span>
               </div>
             )}
             {(acrescimos||[]).filter(a=>a.month===filtMes&&a.year===filtAno).length>0&&(
