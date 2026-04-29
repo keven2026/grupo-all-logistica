@@ -5,7 +5,7 @@ import {
   AlertCircle, MessageSquare, Building2, Calendar, Wallet, FileText,
   User, Shield, Eye, ArrowLeft, Edit2, Trash2, Activity,
   Lock, Layers, BarChart2, Paperclip, Image, Upload, RefreshCw, ChevronDown,
-  Truck, CreditCard, Send, ExternalLink, Hash, Copy, Search, Download
+  Truck, CreditCard, Send, ExternalLink, Hash, Copy, Search, Download, Users
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -29,7 +29,7 @@ const ROLE_LABELS = { director:"Diretor", area_manager:"Gestor de Área", operat
 const ROLE_COLORS = { director:"#f59e0b", area_manager:"#60a5fa", operator:"#34d399", auditor:"#c084fc" };
 const STATUS_LABELS = { open:"Aberta", in_progress:"Em Andamento", awaiting_approval:"Aguard. Aprovação", completed:"Concluída", rejected:"Rejeitada", cancelled:"Cancelada" };
 const STATUS_COLORS = { open:"#64748b", in_progress:"#3b82f6", awaiting_approval:"#f59e0b", completed:"#10b981", rejected:"#ef4444", cancelled:"#475569" };
-const COST_CATS = ["Operacional","Combustível","Pessoal","Infraestrutura","Manutenção","Seguros","TI","Comercial","Outros"];
+const COST_CATS = ["CLT","Terceirizado","Transferência","Limpeza","Galpão","Frota","Gasolina","Salário Agr. Casa","Energia","Imposto","Agregados Externos","Outros"];
 
 // ─────────────────────────────────────────────
 // SEED
@@ -236,6 +236,8 @@ function notifyUsers(users, subject, body) {
   // Fallback: nothing (mailto would open popups for each user)
   console.log("[Notif]", subject, "→", users.map(u=>u.email).join(", "));
 }
+// ── Categorias de custo da operação ───────────────────────
+
 const __STORE__ = {};
 const __LOADED__ = {}; // tracks which keys have been loaded from Supabase
 
@@ -447,6 +449,7 @@ const NAV = [
   { id:"forecast",      label:"Forecast",        icon:BarChart2,       roles:["director","area_manager","auditor"],             financial:true },
   { id:"fechamento",    label:"Fechamento",      icon:Truck,           roles:["director","area_manager","operator","auditor"],  financial:false, fechamento:true },
   { id:"fatjadlog",     label:"Fat. Jadlog",     icon:BarChart2,       roles:["director","area_manager","auditor"],              financial:true  },
+  { id:"mob",           label:"Mão de Obra",     icon:Users,           roles:["director","area_manager","auditor"],              financial:false },
   { id:"pagamentos",    label:"Pagamentos",      icon:CreditCard,      roles:["director","area_manager","auditor"],              financial:true  },
   { id:"admin",         label:"Administração",   icon:Settings,        roles:["director"],                                       financial:false },
 ];
@@ -2821,7 +2824,16 @@ function calcFechamento(linhas, motoristas) {
   const ok = [], nok = [];
   Object.values(grupos).forEach(g => {
     const m = motoristas.find(x => x.matricula === g.mat && x.ativo);
-    if (!m) { nok.push({ mat: g.mat, nome: g.nome }); return; }
+    if (!m) {
+      const entrNok = g.rows.filter(r => r.evento === "entrega" && r.ncte && !r._duplicado);
+      nok.push({
+        mat: g.mat, nome: g.nome,
+        totalCTEs: entrNok.length,
+        totalFaturado: entrNok.reduce((s,r)=>s+(r.valorFaturado||0),0),
+        entregas: entrNok.map(r=>({ ncte:r.ncte, data:r.data, valorFaturado:r.valorFaturado||0 }))
+      });
+      return;
+    }
     // Somente evento=entrega com CTE preenchido conta
     const entregas = g.rows.filter(r => r.evento === "entrega" && r.ncte && !r._duplicado);
     const totalCTEs_entregues = entregas.length; // número de CTEs únicos entregues
@@ -2844,11 +2856,36 @@ function calcFechamento(linhas, motoristas) {
       vDiaria = diasUnicos * m.valorDiaria;
       excedente = Math.max(0, totalCTEs_entregues - (m.minimoCTEs || m.minimoPackotes || 0));
       vCTEs = excedente * valorPorCTE;
+    } else if (m.tipoPagamento === "diaria_por_dia") {
+      // diasDiaria: array of DOW numbers (0=dom,1=seg,...,6=sab) that are paid as daily rate
+      // remaining days of week are paid per CTE
+      const diasDiaria = m.diasDiaria || []; // e.g. [1,2,3,4,5] = seg to sex
+      const diasCTE    = [0,1,2,3,4,5,6].filter(d => !diasDiaria.includes(d));
+      // Parse each entrega date to DOW
+      const getDOW = (dataStr) => {
+        if (!dataStr) return -1;
+        // format DD/MM/YYYY
+        const p = dataStr.split("/");
+        if (p.length === 3) {
+          const d = new Date(`${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}T12:00:00`);
+          return isNaN(d) ? -1 : d.getDay();
+        }
+        return -1;
+      };
+      // Dias únicos onde o motorista trabalhou em dias de diária
+      const diasComDiaria = new Set(
+        g.rows.filter(r => diasDiaria.includes(getDOW(r.data))).map(r => r.data).filter(Boolean)
+      );
+      // CTEs entregues em dias de CTE
+      const ctesDiasCTE = entregas.filter(r => diasCTE.includes(getDOW(r.data)));
+      vDiaria = diasComDiaria.size * m.valorDiaria;
+      vCTEs   = ctesDiasCTE.length * valorPorCTE;
     }
     ok.push({
       id: uid(),
       mat: m.matricula, nome: m.nome, email: m.email,
       tipo: m.tipoPagamento,
+      diasDiaria: m.diasDiaria || [],
       valorDiaria: m.valorDiaria,
       valorCTE: valorPorCTE,
       valorPacote: valorPorCTE, // keep for legacy compat
@@ -2870,7 +2907,7 @@ function calcFechamento(linhas, motoristas) {
       dataPagMot: null, comprovanteMot: null,
     });
   });
-  return { ok, nok };
+  return { ok, nok, totalFaturadoNok: nok.reduce((s,n)=>s+(n.totalFaturado||0),0) };
 }
 
 // ── Status ───────────────────────────────────────────────
@@ -3029,16 +3066,15 @@ function MotoristaModal({ initial, onClose, onSave }) {
     return `AGR-${init.padEnd(3,"X")}-${num}`;
   };
   const [f, sf_] = useState(() => {
-    if (initial) return initial;
+    if (initial) return {...initial, diasDiaria: initial.diasDiaria || [1,2,3,4,5]};
     return {
       nome:"", matricula:"", email:"", cpf:"", telefone:"",
       tipoPagamento:"pacote", valorDiaria:0, valorPacote:0, minimoPackotes:0,
+      diasDiaria:[1,2,3,4,5], // seg-sex por padrão
       codigoAcesso:"",
-      // Dados financeiros
       chavePix:"", tipoChavePix:"cpf",
       banco:"", agencia:"", conta:"", tipoConta:"corrente",
-      // Contrato
-      contrato: null, // { nome, tipo, data }
+      contrato: null,
     };
   });
   const sf = (k, v) => {
@@ -3051,8 +3087,9 @@ function MotoristaModal({ initial, onClose, onSave }) {
   };
   const [tab, setTab] = useState("dados"); // dados | pagamento | financeiro | contrato
   const contratoRef = useRef();
-  const showD = ["diaria","ambos","diaria_excedente"].includes(f.tipoPagamento);
-  const showP = ["pacote","ambos","diaria_excedente"].includes(f.tipoPagamento);
+  const showD = ["diaria","ambos","diaria_excedente","diaria_por_dia"].includes(f.tipoPagamento);
+  const showP = ["pacote","ambos","diaria_excedente","diaria_por_dia"].includes(f.tipoPagamento);
+  const showDias = f.tipoPagamento === "diaria_por_dia";
   const prev  = f.tipoPagamento==="diaria_excedente" && f.minimoPackotes>0
     ? `Ex: fez ${Number(f.minimoPackotes)+10} pcts → ${fmt(f.valorDiaria)} + (10×${fmt(f.valorPacote)}) = ${fmt(Number(f.valorDiaria)+10*Number(f.valorPacote))}`
     : null;
@@ -3107,13 +3144,38 @@ function MotoristaModal({ initial, onClose, onSave }) {
         {tab === "pagamento" && (<>
           <Sel label="Tipo de Pagamento" value={f.tipoPagamento} onChange={e => sf("tipoPagamento", e.target.value)}>
             <option value="diaria">Somente Diária</option>
-            <option value="pacote">Somente por Pacote</option>
-            <option value="ambos">Diária + Todos os Pacotes</option>
+            <option value="pacote">Somente por CTE</option>
+            <option value="ambos">Diária + Todos os CTEs</option>
             <option value="diaria_excedente">Diária + Excedente (acima do mínimo)</option>
+            <option value="diaria_por_dia">Diária em dias específicos + CTE nos demais</option>
           </Sel>
           <div className="grid grid-cols-2 gap-3">
             {showD && <Input label="Valor Diária (R$)" type="number" step="0.01" value={f.valorDiaria} onChange={e => sf("valorDiaria", Number(e.target.value))} />}
             {showP && <Input label={f.tipoPagamento==="diaria_excedente"?"Valor CTE Excedente (R$)":"Valor por CTE (R$)"} type="number" step="0.01" value={f.valorCTE||f.valorPacote||0} onChange={e => { sf("valorCTE", Number(e.target.value)); sf("valorPacote", Number(e.target.value)); }} />}
+            {showDias && (
+              <div>
+                <label className="text-xs text-slate-400 font-medium block mb-2">Dias com <span className="text-amber-400 font-bold">Diária</span> (os demais serão por CTE)</label>
+                <div className="flex gap-2 flex-wrap">
+                  {[["Dom",0],["Seg",1],["Ter",2],["Qua",3],["Qui",4],["Sex",5],["Sáb",6]].map(([label,dow])=>{
+                    const active = (f.diasDiaria||[]).includes(dow);
+                    return (
+                      <button key={dow} type="button"
+                        onClick={()=>{
+                          const cur = f.diasDiaria||[];
+                          sf("diasDiaria", active ? cur.filter(d=>d!==dow) : [...cur,dow].sort());
+                        }}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-semibold border transition-all ${active?"bg-amber-500/20 text-amber-400 border-amber-500/40":"bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500"}`}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Dias de diária: <span className="text-amber-400">{(f.diasDiaria||[]).length}</span> &nbsp;·&nbsp;
+                  Dias de CTE: <span className="text-emerald-400">{7-(f.diasDiaria||[]).length}</span>
+                </p>
+              </div>
+            )}
           </div>
           {f.tipoPagamento === "diaria_excedente" && (
             <div>
@@ -3346,8 +3408,9 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       totalCTEs: totais.ctes, totalEntregas: totais.entregas,
       mots,
       nok: calc.nok,
+      totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -3662,7 +3725,7 @@ function ResumoFinMots({ mots, total }) {
                   <td className="py-2 px-2 text-right text-slate-300 font-semibold">{mediaCTE>0?fmt(mediaCTE):"—"}</td>
                   <td className="py-2 px-2 text-right">
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${tipo==="diaria"?"bg-amber-500/20 text-amber-400":tipo==="ambos"||tipo==="diaria_excedente"?"bg-blue-500/20 text-blue-400":"bg-emerald-500/20 text-emerald-400"}`}>
-                      {tipo==="diaria"?"Diária":tipo==="ambos"?"Diária+CTE":tipo==="diaria_excedente"?"Diária+Exc.":"CTE"}
+                      {tipo==="diaria"?"Diária":tipo==="ambos"?"Diária+CTE":tipo==="diaria_excedente"?"Diária+Exc.":tipo==="diaria_por_dia"?"Diária/Dia":"CTE"}
                     </span>
                   </td>
                 </tr>
@@ -3685,6 +3748,172 @@ function ResumoFinMots({ mots, total }) {
     </Card>
   );
 }
+
+// ─────────────────────────────────────────────
+// RECEITA DO FECHAMENTO — Planilha Jadlog anexada + taxas
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// PLANILHAS & RECEITA DO FECHAMENTO
+// ─────────────────────────────────────────────
+function ReceitaFechamento({ fec, upd }) {
+  const fileRef = useRef();
+  const [importing, setImporting] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // ── Valores das 3 entradas ──
+  const tde            = fec.tde             || 0;        // 1. TDE manual
+  const planilhaCom    = fec.planilhaJadlog  || null;     // 2. Comissão (planilha)
+  const comissao       = planilhaCom?.totalCom || 0;
+
+  // 3. Taxa de Entrega = totalFaturado calculado na planilha do fechamento (motoristas)
+  //    = soma do valorFaturado de todos os CTEs (cadastrados + sem cadastro)
+  const taxaEntregaCad = (fec.mots||[]).reduce((s,c)=>s+(c.totalFaturado||0), 0);
+  const taxaEntregaNok = (fec.nok||[]).reduce((s,n)=>s+(n.totalFaturado||0), 0);
+  const taxaEntrega    = taxaEntregaCad + taxaEntregaNok; // total da planilha de entregas
+
+  const totalReceita   = tde + comissao + taxaEntrega;
+
+  // Custo = apenas agregados CADASTRADOS (sem cadastro não sai despesa)
+  const custoAgrCad    = (fec.mots||[]).reduce((s,c)=>s+(c.totalBruto||0), 0);
+  const saldo          = totalReceita - custoAgrCad;
+
+  // Import comissão planilha
+  const handleImport = async e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setImporting(true); setMsg("");
+    try {
+      const buf = await file.arrayBuffer();
+      const { read, utils } = window.XLSX;
+      const wb  = read(buf);
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const raw = utils.sheet_to_json(ws, { header:1, defval:"", raw:false });
+      let hdrIdx = -1;
+      for (let i=0; i<Math.min(raw.length,10); i++) {
+        if (raw[i].some(c=>String(c).toUpperCase().includes("CTE"))) { hdrIdx=i; break; }
+      }
+      if (hdrIdx<0) { setMsg("❌ Cabeçalho 'CTE' não encontrado"); setImporting(false); return; }
+      const cols = raw[hdrIdx];
+      const gi   = name => cols.findIndex(c=>String(c||"").toLowerCase().includes(name.toLowerCase()));
+      const iFat = cols.findIndex(c=>String(c||"").toLowerCase().includes("frap")||String(c||"").toLowerCase().includes("zfrap"));
+      const iLiq = (() => { const a=cols.map(c=>String(c||"").toLowerCase()); const i=a.lastIndexOf("liquido"); return i>=0?i:gi("liquido"); })();
+      const rows = [];
+      for (let i=hdrIdx+1; i<raw.length; i++) {
+        const r=raw[i]; if(!r[gi("cte")]&&!r[0]) continue;
+        const fat=Math.abs(parseFloat(r[iFat])||0);
+        const com=Math.abs(parseFloat(r[iLiq])||0);
+        if(!fat&&!com) continue;
+        const data=String(r[gi("data")]||"").trim();
+        const quinz=data.split("/").length===3?(parseInt(data.split("/")[0])<=15?1:2):0;
+        rows.push({cte:String(r[gi("cte")]||r[0]),data,fat,com,quinz});
+      }
+      const totalFat=rows.reduce((s,r)=>s+r.fat,0);
+      const totalCom=rows.reduce((s,r)=>s+r.com,0);
+      upd({planilhaJadlog:{arquivo:file.name,totalFat,totalCom,rows,importadoEm:new Date().toISOString()}});
+      setMsg("✅ "+rows.length+" CTEs · Comissão "+totalCom.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}));
+    } catch(err) { setMsg("❌ "+String(err.message||err)); }
+    setImporting(false);
+    if(fileRef.current) fileRef.current.value="";
+  };
+
+  return (
+    <div className="space-y-4">
+      {msg&&<p className={"text-xs px-3 py-2 rounded-lg border "+(msg.startsWith("✅")?"bg-emerald-500/10 border-emerald-500/30 text-emerald-300":"bg-red-500/10 border-red-500/30 text-red-300")}>{msg}</p>}
+
+      {/* 1. TDE */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-200">1. TDE</p>
+            <p className="text-xs text-slate-400">Taxa de Descarga de Entrega — lançamento manual</p>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
+            <span className="text-slate-400 text-sm">R$</span>
+            <input type="number" step="0.01" min="0" value={tde}
+              onChange={e=>upd({tde:parseFloat(e.target.value)||0})}
+              className="w-28 bg-transparent text-sm text-emerald-400 font-bold text-right focus:outline-none"/>
+          </div>
+        </div>
+      </Card>
+
+      {/* 2. Comissão */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <div>
+            <p className="text-sm font-bold text-slate-200">2. Comissão</p>
+            <p className="text-xs text-slate-400">Planilha Jadlog — coluna <span className="text-amber-400">Liquido</span> = comissão</p>
+          </div>
+          <div className="flex gap-2">
+            {planilhaCom&&(
+              <button onClick={()=>{upd({planilhaJadlog:null});setMsg("🗑 Comissão removida");}}
+                className="text-xs px-2 py-1.5 rounded-lg text-red-400 border border-red-500/30 hover:bg-red-500/10 flex items-center gap-1">
+                <Trash2 size={11}/>Apagar
+              </button>
+            )}
+            <Btn onClick={()=>fileRef.current?.click()} disabled={importing}>
+              <Upload size={14}/>{importing?"Importando...":"Importar Planilha"}
+            </Btn>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport}/>
+          </div>
+        </div>
+        {planilhaCom ? (
+          <div className="bg-slate-900 rounded-lg p-3 border border-slate-700 text-xs">
+            <p className="text-slate-300 font-semibold mb-2">📎 {planilhaCom.arquivo}</p>
+            <div className="flex gap-5 flex-wrap">
+              <div><p className="text-slate-500">CTEs</p><p className="text-slate-200 font-bold">{planilhaCom.rows?.length||0}</p></div>
+              <div><p className="text-slate-500">Faturamento bruto</p><p className="text-slate-300 font-bold">{fmt(planilhaCom.totalFat||0)}</p></div>
+              <div><p className="text-slate-500">Comissão</p><p className="text-emerald-400 font-bold">{fmt(comissao)}</p></div>
+              <div><p className="text-slate-500">Margem</p><p className="text-blue-400 font-bold">{planilhaCom.totalFat>0?((comissao/planilhaCom.totalFat)*100).toFixed(1)+"%":"—"}</p></div>
+            </div>
+          </div>
+        ) : (
+          <div className="border border-dashed border-slate-700 rounded-lg p-4 text-center text-xs text-slate-500">Nenhuma planilha importada</div>
+        )}
+      </Card>
+
+      {/* 3. Taxa de Entrega */}
+      <Card className="p-4">
+        <div className="mb-2">
+          <p className="text-sm font-bold text-slate-200">3. Taxa de Entrega</p>
+          <p className="text-xs text-slate-400">Calculado automaticamente da planilha de CTEs importada no fechamento</p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3 border border-slate-700 text-xs">
+          <div className="flex gap-5 flex-wrap">
+            <div><p className="text-slate-500">Cadastrados</p><p className="text-emerald-400 font-bold">{fmt(taxaEntregaCad)}</p></div>
+            <div><p className="text-slate-500">Sem cadastro</p><p className="text-amber-400 font-bold">{fmt(taxaEntregaNok)}<span className="text-slate-500 ml-1">(entra receita, não sai despesa)</span></p></div>
+            <div><p className="text-slate-500">Total</p><p className="text-emerald-400 font-bold">{fmt(taxaEntrega)}</p></div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Resumo */}
+      <Card className={"p-5 border-2 "+(saldo>=0?"border-emerald-500/30 bg-emerald-500/5":"border-red-500/30 bg-red-500/5")}>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">💰 Resumo do Fechamento</p>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span className="text-slate-400">TDE</span><span className="text-emerald-400 font-semibold">{fmt(tde)}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Comissão</span><span className="text-emerald-400 font-semibold">{fmt(comissao)}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Taxa de Entrega</span><span className="text-emerald-400 font-semibold">{fmt(taxaEntrega)}</span></div>
+          <div className="flex justify-between border-t border-slate-700 pt-2 font-bold text-base">
+            <span className="text-slate-200">Total Receita</span><span className="text-emerald-400">{fmt(totalReceita)}</span>
+          </div>
+          <div className="flex justify-between text-sm border-t border-slate-700 pt-2">
+            <span className="text-slate-400">(-) Custo Agregados Cadastrados</span><span className="text-red-400 font-semibold">-{fmt(custoAgrCad)}</span>
+          </div>
+          {taxaEntregaNok>0&&(
+            <div className="flex justify-between text-xs">
+              <span className="text-amber-400/70">Sem cadastro — {(fec.nok||[]).length} moto(s) · faturaram mas sem despesa</span>
+              <span className="text-amber-400/70">+{fmt(taxaEntregaNok)}</span>
+            </div>
+          )}
+          <div className={"flex justify-between border-t-2 pt-3 "+(saldo>=0?"border-emerald-500/40":"border-red-500/40")}>
+            <span className="text-slate-100 font-bold text-base">SALDO</span>
+            <span className={"text-2xl font-black "+(saldo>=0?"text-emerald-400":"text-red-400")}>{fmt(saldo)}</span>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 
 function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) {  const [tab, setTab] = useState("resumo");
   const [showCorr, setShowCorr] = useState(null);
@@ -3836,7 +4065,8 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[["resumo","📊 Resumo"],["mots","🚚 Por Motorista"],["ctes","📋 CTEs de Entrega"],
-          ...(isGestOrDir ? [["financeiro","💰 Financeiro"]] : []),
+          ["receita","📎 Planilhas & Receita"],
+          ...(isGestOrDir ? [["financeiro","💰 Saldo Financeiro"]] : []),
           ["links","🔗 Links Agregados"],["hist","📜 Histórico"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab === v ? "bg-red-600 text-white border-red-600" : "bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
@@ -3848,9 +4078,11 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Card className="p-4"><p className="text-xs text-slate-400 mb-1">Total a Pagar</p><p className="text-xl font-bold text-emerald-400">{fmt(total)}</p></Card>
-            <Card className="p-4"><p className="text-xs text-slate-400 mb-1">Motoristas</p><p className="text-xl font-bold text-slate-100">{(fec.mots||[]).length}</p></Card>
-            <Card className="p-4"><p className="text-xs text-slate-400 mb-1">CTEs Planilha</p><p className="text-xl font-bold text-slate-100">{fec.totalCTEs||0}</p></Card>
-            <Card className="p-4"><p className="text-xs text-slate-400 mb-1">Entregas confirmadas</p><p className="text-xl font-bold text-emerald-400">{fec.totalEntregas||0}</p></Card>
+            <Card className="p-4"><p className="text-xs text-slate-400 mb-1">Motoristas cadastrados</p><p className="text-xl font-bold text-slate-100">{(fec.mots||[]).length}</p></Card>
+            <Card className="p-4"><p className="text-xs text-slate-400 mb-1">Sem cadastro (faturaram)</p><p className="text-xl font-bold text-amber-400">{(fec.nok||[]).length}</p>
+              {(fec.nok||[]).length>0&&<p className="text-xs text-amber-400/70">{fmt((fec.nok||[]).reduce((s,n)=>s+(n.totalFaturado||0),0))} gerado</p>}
+            </Card>
+            <Card className="p-4"><p className="text-xs text-slate-400 mb-1">CTEs totais</p><p className="text-xl font-bold text-slate-100">{fec.totalCTEs||0}</p></Card>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Card className="p-4">
@@ -3859,7 +4091,13 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                 <div className="flex justify-between"><span className="text-slate-300">Diárias</span><span className="text-amber-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+c.vDiaria,0))}</span></div>
                 <div className="flex justify-between"><span className="text-slate-300">CTEs entregues</span><span className="text-emerald-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+(c.vCTEs||c.vPacotes||0),0))}</span></div>
                 <div className="flex justify-between"><span className="text-slate-300">Correções manuais</span><span className="text-blue-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+(c.totalBruto-c.subtotal),0))}</span></div>
-                <div className="flex justify-between border-t border-slate-700 pt-1.5 font-bold"><span className="text-slate-100">Total</span><span className="text-emerald-400">{fmt(total)}</span></div>
+                <div className="flex justify-between border-t border-slate-700 pt-1.5 font-bold"><span className="text-slate-100">Total a Pagar</span><span className="text-emerald-400">{fmt(total)}</span></div>
+                {(fec.nok||[]).length>0&&(
+                  <div className="flex justify-between border-t border-amber-500/20 pt-1.5">
+                    <span className="text-amber-400 text-xs">Sem cadastro — faturaram (não pagar)</span>
+                    <span className="text-amber-400 font-semibold text-xs">{fmt((fec.nok||[]).reduce((s,n)=>s+(n.totalFaturado||0),0))}</span>
+                  </div>
+                )}
               </div>
             </Card>
             <Card className="p-4">
@@ -3877,10 +4115,32 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
           <ResumoFinMots mots={fec.mots||[]} total={total} />
 
           {fec.nok?.length > 0 && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-              <p className="text-xs font-semibold text-amber-400 mb-1">⚠ Sem cadastro ({fec.nok.length}):</p>
-              {fec.nok.map(m => <p key={m.mat} className="text-xs text-amber-300">• Mat. {m.mat} — {m.nome}</p>)}
-            </div>
+            <Card className="p-4 border border-amber-500/20">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-amber-400">⚠ Sem cadastro ({fec.nok.length}) — Faturado mas SEM pagamento</p>
+                <span className="text-xs text-amber-400 font-bold">{fmt((fec.nok||[]).reduce((s,m)=>s+(m.totalFaturado||0),0))}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="border-b border-slate-700 text-slate-500">
+                    <th className="text-left py-1 px-2">Nome</th>
+                    <th className="text-right py-1 px-2">CTEs</th>
+                    <th className="text-right py-1 px-2">Val. Faturado</th>
+                    <th className="text-right py-1 px-2">Custo</th>
+                  </tr></thead>
+                  <tbody>
+                    {fec.nok.map(m=>(
+                      <tr key={m.mat} className="border-b border-slate-800">
+                        <td className="py-1.5 px-2 text-amber-300 font-medium">{m.nome} {m.mat&&m.mat!==m.nome&&<span className="text-slate-500">(Mat. {m.mat})</span>}</td>
+                        <td className="py-1.5 px-2 text-right text-slate-300">{m.totalCTEs||0}</td>
+                        <td className="py-1.5 px-2 text-right text-emerald-400 font-semibold">{m.totalFaturado>0?fmt(m.totalFaturado):"—"}</td>
+                        <td className="py-1.5 px-2 text-right text-slate-500 text-xs italic">Não pago</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           )}
         </div>
       )}
@@ -3915,6 +4175,11 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                   <div className="flex gap-3 mt-1 text-xs flex-wrap">
                     {c.vDiaria > 0 && <span className="text-amber-400">Diária: {c.diasUnicos||1} dia(s) × {fmt(c.valorDiaria)} = {fmt(c.vDiaria)}</span>}
                     {c.vCTEs > 0 && <span className="text-emerald-400">{c.totalCTEs} CTEs × {fmt(c.valorCTE||c.valorPacote)} = {fmt(c.vCTEs)}</span>}
+                    {c.tipo==="diaria_por_dia"&&c.diasDiaria&&(
+                      <span className="text-slate-400">
+                        Dias diária: {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].filter((_,i)=>(c.diasDiaria||[]).includes(i)).join(",")} · Dias CTE: {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].filter((_,i)=>!(c.diasDiaria||[]).includes(i)).join(",")}
+                      </span>
+                    )}
                   </div>
                   {c.comentarioAgr && <p className="text-xs text-slate-400 mt-1 italic">"{c.comentarioAgr}"</p>}
                   {c.comentarioGest && <p className="text-xs text-orange-400 mt-1 italic">Gestor: "{c.comentarioGest}"</p>}
@@ -4073,93 +4338,74 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
 
       {/* VISÃO FINANCEIRA — gestor/diretor only */}
       {tab === "financeiro" && isGestOrDir && (() => {
-        const totalFaturado = fec.mots.reduce((s,c) => s + (c.totalFaturado||0), 0);
-        const totalPago     = fec.mots.reduce((s,c) => s + c.totalBruto, 0);
-        const saldo         = totalFaturado - totalPago;
-        const margem        = totalFaturado > 0 ? ((saldo / totalFaturado) * 100).toFixed(1) : "—";
-        const hasFat        = totalFaturado > 0;
+        // ── 3 entradas do fechamento ──
+        const tde           = fec.tde             || 0;
+        const comissao      = fec.planilhaJadlog?.totalCom || 0;
+        const taxaEntregaCad= (fec.mots||[]).reduce((s,c)=>s+(c.totalFaturado||0), 0);
+        const taxaEntregaNok= (fec.nok||[]).reduce((s,n)=>s+(n.totalFaturado||0), 0);
+        const taxaEntrega   = taxaEntregaCad + taxaEntregaNok;
+        const totalReceita  = tde + comissao + taxaEntrega;
+        // Sem cadastro: entra receita, não sai despesa
+        const custoAgrCad   = fec.mots.reduce((s,c)=>s+(c.totalBruto||0),0);
+        const saldo         = totalReceita - custoAgrCad;
+        const margem        = totalReceita > 0 ? (saldo/totalReceita*100) : 0;
+
         return (
           <div className="space-y-4">
-            {!hasFat && (
+            {!comissao && !tde && taxaEntrega===0 && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 text-sm text-amber-300">
-                <p className="font-semibold mb-1">Valor faturado não disponível</p>
-                <p className="text-xs text-amber-400/70">A planilha importada não contém a coluna <code className="bg-amber-500/20 px-1 rounded">TaxaEntrega</code>. Adicione essa coluna na planilha para calcular margem e saldo por CTE.</p>
+                <p className="font-semibold mb-1">⚠ Sem dados de receita</p>
+                <p className="text-xs text-amber-400/70">Vá na aba <strong>📎 Planilhas & Receita</strong> para lançar TDE, importar a comissão e confirmar as taxas de entrega.</p>
               </div>
             )}
 
             {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Card className="p-4 border-blue-500/20 bg-blue-500/5">
-                <p className="text-xs text-blue-400/70 mb-1">Total Faturado (Receita)</p>
-                <p className="text-xl font-bold text-blue-400">{hasFat ? fmt(totalFaturado) : "—"}</p>
-              </Card>
-              <Card className="p-4 border-red-500/20 bg-red-500/5">
-                <p className="text-xs text-red-400/70 mb-1">Total Pago Agregados</p>
-                <p className="text-xl font-bold text-red-400">{fmt(totalPago)}</p>
-              </Card>
-              <Card className={`p-4 ${saldo >= 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"}`}>
-                <p className="text-xs text-slate-400 mb-1">Saldo (Receita − Custo)</p>
-                <p className={`text-xl font-bold ${saldo >= 0 ? "text-emerald-400" : "text-red-400"}`}>{hasFat ? fmt(saldo) : "—"}</p>
-              </Card>
-              <Card className="p-4">
-                <p className="text-xs text-slate-400 mb-1">Margem</p>
-                <p className={`text-xl font-bold ${Number(margem) >= 20 ? "text-emerald-400" : Number(margem) >= 0 ? "text-amber-400" : "text-red-400"}`}>{hasFat ? `${margem}%` : "—"}</p>
-              </Card>
+              <KpiCard compact label="TDE" value={fmt(tde)} icon={Wallet} color="#60a5fa"/>
+              <KpiCard compact label="Comissão" value={fmt(comissao)} icon={DollarSign} color="#10b981"/>
+              <KpiCard compact label="Taxa Entrega" value={fmt(taxaEntrega)} icon={Truck} color="#f59e0b"/>
+              <KpiCard compact label="Custo Agregados" value={fmt(custoAgrCad)} icon={Users} color="#ef4444"/>
             </div>
 
-            {/* Per-motorista breakdown */}
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Breakdown por Motorista</h3>
-              {fec.mots.map(c => {
-                const fat   = c.totalFaturado || 0;
-                const pago  = c.totalBruto;
-                const sal   = fat - pago;
-                const marg  = fat > 0 ? ((sal/fat)*100).toFixed(1) : null;
-                return (
-                  <Card key={c.id} className="p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-100">{c.nome} <span className="text-xs text-slate-500">Mat: {c.mat}</span></p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2 text-xs">
-                          <div><p className="text-slate-500">Faturado</p><p className="text-blue-400 font-bold text-sm">{fat > 0 ? fmt(fat) : "—"}</p></div>
-                          <div><p className="text-slate-500">Pago</p><p className="text-red-400 font-bold text-sm">{fmt(pago)}</p></div>
-                          <div><p className="text-slate-500">Saldo</p><p className={`font-bold text-sm ${sal >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fat > 0 ? fmt(sal) : "—"}</p></div>
-                          <div><p className="text-slate-500">Margem</p><p className={`font-bold text-sm ${marg && Number(marg) >= 20 ? "text-emerald-400" : marg && Number(marg) >= 0 ? "text-amber-400" : "text-red-400"}`}>{marg ? `${marg}%` : "—"}</p></div>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Per-CTE saldo */}
-                    {hasFat && c.entregas?.some(e => e.valorFaturado > 0) && (
-                      <div className="mt-3 border-t border-slate-700 pt-3">
-                        <p className="text-xs text-slate-500 mb-2">Saldo por CTE:</p>
-                        <div className="max-h-40 overflow-y-auto space-y-1">
-                          {c.entregas.map((e,i) => {
-                            const vPago = (c.vPacotes > 0 && c.totalPacotes > 0) ? (e.qPacotes / c.totalPacotes) * c.vPacotes : 0;
-                            const eSaldo = e.valorFaturado - vPago;
-                            return (
-                              <div key={i} className="flex items-center justify-between text-xs bg-slate-900 rounded px-3 py-1.5 border border-slate-700">
-                                <span className="text-blue-400 font-mono">{e.ncte}</span>
-                                <span className="text-slate-500">{e.data}</span>
-                                <span className="text-slate-400">{e.qPacotes} pcts</span>
-                                <span className="text-blue-400">{fmt(e.valorFaturado)}</span>
-                                <span className="text-red-400">-{fmt(vPago)}</span>
-                                <span className={`font-bold ${eSaldo >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(eSaldo)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
+            {/* Saldo */}
+            <Card className={"p-5 border-2 "+(saldo>=0?"border-emerald-500/40 bg-emerald-500/5":"border-red-500/40 bg-red-500/5")}>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">💰 Demonstrativo do Fechamento</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-400">TDE</span><span className="text-emerald-400 font-semibold">{fmt(tde)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Comissão (Jadlog)</span><span className="text-emerald-400 font-semibold">{fmt(comissao)}</span></div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Taxa de Entrega</span>
+                  <span className="text-emerald-400 font-semibold">{fmt(taxaEntrega)}</span>
+                </div>
+                {taxaEntregaNok>0&&(
+                  <div className="flex justify-between text-xs pl-3">
+                    <span className="text-amber-400/70">↳ Sem cadastro ({(fec.nok||[]).length}) — entra receita, sem despesa</span>
+                    <span className="text-amber-400/70">+{fmt(taxaEntregaNok)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-slate-700 pt-2 font-bold">
+                  <span className="text-slate-200">Total Receita</span><span className="text-emerald-400 text-base">{fmt(totalReceita)}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-700/50 pt-2">
+                  <span className="text-slate-400">(-) Custo Agregados Cadastrados</span><span className="text-red-400 font-semibold">-{fmt(custoAgrCad)}</span>
+                </div>
+                <div className={"flex justify-between border-t-2 pt-3 items-center "+(saldo>=0?"border-emerald-500/40":"border-red-500/40")}>
+                  <span className="text-slate-100 font-bold text-base">SALDO</span>
+                  <div className="text-right">
+                    <p className={"text-3xl font-black "+(saldo>=0?"text-emerald-400":"text-red-400")}>{fmt(saldo)}</p>
+                    <p className={"text-xs "+(margem>=0?"text-emerald-400/70":"text-red-400/70")}>{margem.toFixed(1)}% margem</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
           </div>
         );
       })()}
 
+
       {/* LINKS AGREGADOS */}
       {tab === "links" && <PainelLinks fec={fec} motoristas={motoristas} />}
+      {tab === "receita" && <ReceitaFechamento fec={fec} upd={upd} />}
 
       {/* HISTÓRICO */}
       {tab === "hist" && (
@@ -4191,7 +4437,281 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
 }
 
 // ── Lista de fechamentos ─────────────────────────────────
-function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMotoristas }) {
+// ─────────────────────────────────────────────
+// DRE INTEGRADO AO FECHAMENTO
+// ─────────────────────────────────────────────
+function DreFechamento({ fechamentos, motoristas, dreEntradas, setDreEntradas, fixedCosts, costEntries, faturamentosJadlog, acrescimos }) {
+  const [filtMes,  setFiltMes]  = useState(new Date().getMonth()+1);
+  const [filtAno,  setFiltAno]  = useState(new Date().getFullYear());
+  const [filtQuin, setFiltQuin] = useState(0); // 0=mês, 1=1ª, 2=2ª
+  const [showNew,  setShowNew]  = useState(false);
+  const MONTHS = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  // Receita: soma das planilhas Jadlog anexadas nos fechamentos do período
+  // + fallback para faturamentosJadlog global se não houver planilha por fechamento
+  const getFecPlanilhas = () => {
+    const fecComPlanilha = (fechamentos||[]).filter(f=>f.planilhaJadlog?.rows?.length>0);
+    if (fecComPlanilha.length > 0) {
+      // Use planilhas attached to fechamentos
+      return fecComPlanilha.flatMap(f=>(f.planilhaJadlog.rows||[]).map(r=>({...r, fecId:f.id})));
+    }
+    // Fallback: global Fat.Jadlog
+    return (faturamentosJadlog||[]).flatMap(b=>b.rows).map(r=>({...r, fecId:null}));
+  };
+
+  const todasPlanilhaRows = getFecPlanilhas();
+
+  const getJadlog = (q) => {
+    const rows = todasPlanilhaRows.filter(r=>(!q || r.quinz===q));
+    // If we have per-fec planilhas, don't filter by month (already in the fechamento)
+    const hasFecPlanilha = (fechamentos||[]).some(f=>f.planilhaJadlog?.rows?.length>0);
+    if (hasFecPlanilha) return rows.reduce((s,r)=>s+(r.com||r.comissao||0),0);
+    // Global fallback: filter by month/ano
+    return (faturamentosJadlog||[]).flatMap(b=>b.rows)
+      .filter(r=>r.mes===filtMes && r.ano===filtAno && (!q || r.quinz===q))
+      .reduce((s,r)=>s+r.comissao,0);
+  };
+
+  // Taxas de entrega (soma dos fechamentos)
+  const getTaxas = () => (fechamentos||[]).reduce((s,f)=>s+(f.taxasEntregas||0),0);
+
+  // Agregados cadastrados — custo total do fechamento (totalBruto de todos os motoristas calculados)
+  // Bate exatamente com o total do fechamento
+  const getAgrExt = () => {
+    return (fechamentos||[]).flatMap(f=>f.mots||[])
+      .reduce((s,m)=>s+(m.totalBruto||0), 0);  // todos, não só pago — igual ao total do fechamento
+  };
+
+  // Comissão ALL Entregas importada dentro dos fechamentos
+  const getComAllEntregas = (q) => {
+    return (fechamentos||[])
+      .filter(f => f.comAllEntregas?.rows?.length > 0)
+      .flatMap(f => (f.comAllEntregas.rows||[]))
+      .filter(r => !q || r.quinz===q)
+      .reduce((s,r) => s+(r.com||0), 0);
+  };
+
+  // Agregados sem cadastro — valor GERADO (entrada, não saída)
+  const getAgrCasa = () => {
+    return (fechamentos||[]).flatMap(f=>f.nok||[])
+      .reduce((s,n)=>s+(n.totalFaturado||0), 0);
+  };
+
+  // DRE entries
+  const getDRE = (q, cat) =>
+    (dreEntradas||[]).filter(e=>e.mes===filtMes&&e.ano===filtAno&&(!q||e.quinz===q)&&(!cat||e.categoria===cat))
+      .reduce((s,e)=>s+(e.valor||0), 0);
+
+  // Fixed costs (split by 2 for quinzena)
+  const getFixed = (cat) => {
+    const v = (fixedCosts||[]).filter(c=>c.active&&(!cat||c.category===cat)).reduce((s,c)=>s+(c.value||0),0);
+    return filtQuin ? v/2 : v;
+  };
+
+  // Variable entries
+  const getVar = (cat) =>
+    (costEntries||[]).filter(c=>c.month===filtMes&&c.year===filtAno&&(!cat||c.category===cat)).reduce((s,c)=>s+(c.value||0),0);
+
+  const q = filtQuin || null;
+  const receitaJadlog      = getJadlog(q);
+  const receitaAllEntregas = getComAllEntregas(q);
+  const receitaTaxas       = getTaxas();
+  const receitaAgrCasa     = getAgrCasa();
+  const totalReceita       = receitaJadlog + receitaAllEntregas + receitaTaxas;
+
+  // Custos por categoria
+  const custos = {};
+  COST_CATS.forEach(cat => {
+    let v = getFixed(cat) + getVar(cat) + getDRE(q, cat);
+    if (v > 0) custos[cat] = v;
+  });
+
+  // Agregar externos = custo de saída (pagamento)
+  const agrExtCusto = getAgrExt();
+  if (agrExtCusto > 0) custos["Agregados Externos"] = agrExtCusto;
+
+  const totalCustos = Object.values(custos).reduce((s,v)=>s+v, 0);
+  const resultado   = totalReceita - totalCustos;
+  const margem      = totalReceita > 0 ? (resultado/totalReceita*100) : 0;
+
+  // Agregados da casa detalhes
+  const agrCasaList = useMemo(() =>
+    (fechamentos||[]).flatMap(f=>(f.nok||[]).map(n=>({...n, fecId:f.id, fecDesc:f.descricao||""}))),
+    [fechamentos]
+  );
+  const custoAgrCasaTotal = getDRE(null,"Salário Agr. Casa") + getDRE(null,"Frota") + getDRE(null,"Gasolina");
+  const totalCTEsCasa = agrCasaList.reduce((s,n)=>s+(n.totalCTEs||0),0);
+
+  const periodoLabel = filtQuin===1?"1ª Quinzena":filtQuin===2?"2ª Quinzena":"Mês inteiro";
+
+  return (
+    <div className="space-y-5">
+      {/* Filtros */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+          {[[0,"Mês"],[1,"1ª Quinz."],[2,"2ª Quinz."]].map(([v,l])=>(
+            <button key={v} onClick={()=>setFiltQuin(v)}
+              className={"px-3 py-1.5 font-semibold transition-all "+(filtQuin===v?"bg-amber-600 text-white":"bg-slate-800 text-slate-400 hover:text-slate-200")}>{l}</button>
+          ))}
+        </div>
+        <Sel value={filtMes} onChange={e=>setFiltMes(Number(e.target.value))}>
+          {MONTHS.slice(1).map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+        </Sel>
+        <Sel value={filtAno} onChange={e=>setFiltAno(Number(e.target.value))}>
+          {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+        </Sel>
+        <Btn size="sm" onClick={()=>setShowNew(true)}><Plus size={13}/>Lançar Custo</Btn>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard compact label={"Comissão Jadlog"} value={fmt(receitaJadlog)} icon={Wallet} color="#10b981"/>
+        <KpiCard compact label="Total Custos" value={fmt(totalCustos)} icon={DollarSign} color="#ef4444"/>
+        <KpiCard compact label="Resultado" value={fmt(resultado)} icon={TrendingUp} color={resultado>=0?"#10b981":"#ef4444"}/>
+        <KpiCard compact label="Margem" value={margem.toFixed(1)+"%"} icon={BarChart2} color={margem>=10?"#10b981":margem>=0?"#f59e0b":"#ef4444"}/>
+      </div>
+
+      {/* DRE Table */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* ENTRADAS */}
+        <Card className="p-4">
+          <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3">▲ ENTRADAS — {periodoLabel}</p>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-300">Comissão Jadlog</span>
+              <span className="text-emerald-400 font-bold">{fmt(receitaJadlog)}</span>
+            </div>
+            {receitaAllEntregas>0&&(
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-300">Comissão ALL Entregas</span>
+                <span className="text-emerald-400 font-semibold">{fmt(receitaAllEntregas)}</span>
+              </div>
+            )}
+            {receitaTaxas>0&&(
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-300">Taxas de Entrega</span>
+                <span className="text-emerald-400 font-semibold">{fmt(receitaTaxas)}</span>
+              </div>
+            )}
+            {(acrescimos||[]).filter(a=>a.month===filtMes&&a.year===filtAno).length>0&&(
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">Acréscimos avulsos</span>
+                <span className="text-emerald-400">{fmt((acrescimos||[]).filter(a=>a.month===filtMes&&a.year===filtAno).reduce((s,a)=>s+(a.value||0),0))}</span>
+              </div>
+            )}
+            {receitaAgrCasa>0&&(
+              <div className="flex justify-between items-center text-xs border-t border-slate-700 pt-2">
+                <span className="text-amber-400/80">↳ Agr. da Casa geraram (dentro da comissão)</span>
+                <span className="text-amber-400/80 font-semibold">{fmt(receitaAgrCasa)}</span>
+              </div>
+            )}
+            <div className="border-t border-slate-700 pt-2 flex justify-between font-bold">
+              <span className="text-slate-200">Total Receita</span>
+              <span className="text-emerald-400 text-lg">{fmt(totalReceita)}</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* SAÍDAS */}
+        <Card className="p-4">
+          <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">▼ SAÍDAS — {periodoLabel}</p>
+          <div className="space-y-1.5">
+            {Object.entries(custos).sort((a,b)=>b[1]-a[1]).map(([cat,v])=>(
+              <div key={cat} className="flex justify-between items-center text-xs">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{background:CAT_COLORS[cat]||"#94a3b8"}}/>
+                  {cat}
+                </span>
+                <span className="text-red-400 font-semibold">{fmt(v)}</span>
+              </div>
+            ))}
+            <div className="border-t border-slate-700 pt-2 flex justify-between font-bold">
+              <span className="text-slate-200">Total Custos</span>
+              <span className="text-red-400 text-lg">{fmt(totalCustos)}</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* RESULTADO */}
+      <Card className={"p-5 border-2 "+(resultado>=0?"border-emerald-500/40 bg-emerald-500/5":"border-red-500/40 bg-red-500/5")}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">RESULTADO LÍQUIDO — {periodoLabel} {MONTHS[filtMes]}/{filtAno}</p>
+            <p className={"text-4xl font-black mt-1 "+(resultado>=0?"text-emerald-400":"text-red-400")}>{fmt(resultado)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-400">Margem</p>
+            <p className={"text-3xl font-bold "+(margem>=10?"text-emerald-400":margem>=0?"text-amber-400":"text-red-400")}>{margem.toFixed(1)}%</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Agregados da Casa */}
+      {agrCasaList.length>0&&(
+        <Card className="p-4">
+          <p className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">🏠 Agregados da Casa (sem cadastro)</p>
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300 mb-3">
+            ✅ Valor gerado (receita deles) está incluído na comissão Jadlog acima.<br/>
+            ⚡ Custo deles = Salário + Frota + Gasolina (lançados via "Lançar Custo"). Custo/CTE atual: <strong>{totalCTEsCasa>0&&custoAgrCasaTotal>0?fmt(custoAgrCasaTotal/totalCTEsCasa)+" / CTE":"lance os custos acima"}</strong>
+          </div>
+          <table className="w-full text-xs">
+            <thead><tr className="border-b border-slate-700 text-slate-400">
+              <th className="text-left py-2 px-2">Nome</th>
+              <th className="text-right py-2 px-2">CTEs</th>
+              <th className="text-right py-2 px-2">Valor Gerado</th>
+              <th className="text-right py-2 px-2">Custo Estimado</th>
+              <th className="text-right py-2 px-2">Margem</th>
+            </tr></thead>
+            <tbody>
+              {agrCasaList.map((n,i)=>{
+                const custoEst = totalCTEsCasa>0 ? (n.totalCTEs||0)*(custoAgrCasaTotal/totalCTEsCasa) : 0;
+                const marg = n.totalFaturado>0 ? ((n.totalFaturado-custoEst)/n.totalFaturado*100) : null;
+                return (
+                  <tr key={i} className="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td className="py-2 px-2 font-semibold text-amber-400">{n.nome}</td>
+                    <td className="py-2 px-2 text-right text-slate-300">{n.totalCTEs||0}</td>
+                    <td className="py-2 px-2 text-right text-emerald-400 font-semibold">{n.totalFaturado>0?fmt(n.totalFaturado):"—"}</td>
+                    <td className="py-2 px-2 text-right text-red-400">{custoEst>0?fmt(custoEst):"—"}</td>
+                    <td className={"py-2 px-2 text-right font-bold "+(marg===null?"text-slate-500":marg>=20?"text-emerald-400":marg>=0?"text-amber-400":"text-red-400")}>
+                      {marg!==null?marg.toFixed(1)+"%":"—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* Lançamentos do período */}
+      {(dreEntradas||[]).filter(e=>e.mes===filtMes&&e.ano===filtAno).length>0&&(
+        <Card className="p-4">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">📋 Custos lançados no período</p>
+          <div className="space-y-1.5">
+            {(dreEntradas||[]).filter(e=>e.mes===filtMes&&e.ano===filtAno).sort((a,b)=>a.quinz-b.quinz).map(e=>(
+              <div key={e.id} className="flex items-center justify-between text-xs bg-slate-900 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{background:CAT_COLORS[e.categoria]||"#94a3b8"}}/>
+                  <span className="text-slate-300">{e.descricao}</span>
+                  <span className="text-slate-500">{e.categoria} · {e.quinz===1?"1ª Q":e.quinz===2?"2ª Q":"Mês"}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-red-400 font-semibold">{fmt(e.valor)}</span>
+                  <button onClick={()=>setDreEntradas(p=>p.filter(x=>x.id!==e.id))} className="text-slate-600 hover:text-red-400"><Trash2 size={12}/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {showNew&&<DRENovaEntrada onSave={e=>{setDreEntradas(p=>[...p,{...e,id:uid()}]);setShowNew(false);}} onClose={()=>setShowNew(false)} defaultMes={filtMes} defaultAno={filtAno}/>}
+    </div>
+  );
+}
+
+function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMotoristas, dreEntradas, setDreEntradas, fixedCosts, costEntries, faturamentosJadlog, acrescimos }) {
   const [subView, setSubView] = useState("lista");
   const [showNovo, setShowNovo] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -4286,11 +4806,14 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
           <h1 className="text-xl font-bold text-slate-100">Fechamento de Entregas</h1>
           <p className="text-sm text-slate-400">{fechamentos.length} fechamento(s){hasFilter ? ` · ${fechamentosFiltrados.length} filtrado(s)` : ""}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {userHasFechamento(user) && (
-            <Btn variant="secondary" size="sm" onClick={() => setSubView(v => v === "lista" ? "mots" : "lista")}>
-              <Truck size={13} />{subView === "lista" ? "Motoristas" : "← Fechamentos"}
-            </Btn>
+            <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+              {[["lista","📋 Fechamentos"],["mots","🚚 Motoristas"],["dre","📊 DRE"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setSubView(v)}
+                  className={`px-3 py-1.5 font-semibold transition-all ${subView===v?"bg-red-600 text-white":"bg-slate-800 text-slate-400 hover:text-slate-200"}`}>{l}</button>
+              ))}
+            </div>
           )}
           {user.role !== "auditor" && subView === "lista" && (
             <Btn onClick={() => setShowNovo(true)}><Plus size={14} />Novo Fechamento</Btn>
@@ -4299,6 +4822,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
       </div>
 
       {subView === "mots" && <MotoristasView motoristas={motoristas} setMotoristas={setMotoristas} />}
+      {subView === "dre"  && <DreFechamento fechamentos={fechamentos} motoristas={motoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
 
       {subView === "lista" && (
         <>
@@ -5757,6 +6281,812 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
 }
 
 
+// ─────────────────────────────────────────────
+// MÃO DE OBRA — CONFERÊNCIA
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// DRE — DEMONSTRATIVO DE RESULTADO POR QUINZENA
+// ─────────────────────────────────────────────
+const CAT_COLORS = {
+  "CLT":"#60a5fa","Terceirizado":"#f59e0b","Transferência":"#a78bfa",
+  "Limpeza":"#34d399","Galpão":"#fb923c","Frota":"#38bdf8",
+  "Gasolina":"#facc15","Salário Agr. Casa":"#f87171","Agregados Externos":"#4ade80","Outros":"#94a3b8"
+};
+
+function PLCard({ label, pl, highlight }) {
+  return (
+    <Card className={"p-5 "+(highlight?"border border-amber-500/30 bg-amber-500/5":"")}>
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">{label}</p>
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm"><span className="text-emerald-400 font-semibold">Comissão</span><span className="text-emerald-400 font-bold">{fmt(pl.receita)}</span></div>
+        <div className="border-t border-slate-700 pt-2 space-y-1">
+          {Object.entries(pl.categorias).sort((a,b)=>b[1]-a[1]).map(([cat,v])=>(
+            <div key={cat} className="flex justify-between text-xs">
+              <span className="text-slate-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:CAT_COLORS[cat]||"#94a3b8"}}/>
+                {cat}
+              </span>
+              <span className="text-red-400">-{fmt(v)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-slate-700 pt-2 flex justify-between">
+          <span className="text-xs font-bold text-slate-300">Total Custos</span>
+          <span className="text-red-400 font-bold text-sm">{fmt(pl.totalCustos)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-bold text-slate-200">Resultado</span>
+          <div className="text-right">
+            <p className={"text-lg font-bold "+(pl.resultado>=0?"text-emerald-400":"text-red-400")}>{fmt(pl.resultado)}</p>
+            <p className={"text-xs "+(pl.margem>=0?"text-emerald-400/70":"text-red-400/70")}>{pl.margem.toFixed(1)}% margem</p>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function DREView({ user, dreEntradas, setDreEntradas, fixedCosts, costEntries, faturamentosJadlog, fechamentos, acrescimos }) {
+  const [tab, setTab]   = useState("quinzena");
+  const [showNew, setShowNew] = useState(false);
+  const [filtAno, setFiltAno]  = useState(new Date().getFullYear());
+  const [filtMes, setFiltMes]  = useState(new Date().getMonth()+1);
+  const MONTHS = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  // ── Helpers ───────────────────────────────────────
+  // Receita por quinzena from Jadlog
+  const getComJadlog = (mes, ano, quinz) =>
+    (faturamentosJadlog||[]).flatMap(b=>b.rows)
+      .filter(r=>r.mes===mes&&r.ano===ano&&(quinz?""+r.quinz===(""+quinz):true))
+      .reduce((s,r)=>s+r.comissao,0);
+
+  // Agregados externos from fechamentos (motoristas cadastrados pagos)
+  const getAgregExt = (mes, ano, quinz) => {
+    const ctes = (faturamentosJadlog||[]).flatMap(b=>b.rows).filter(r=>r.mes===mes&&r.ano===ano&&(quinz?""+r.quinz===(""+quinz):true));
+    if (!ctes.length) {
+      // fallback: sum totalBruto from fechamentos for that period
+      return (fechamentos||[]).flatMap(f=>f.mots||[]).filter(m=>m.etapa==="pago").reduce((s,m)=>s+(m.totalBruto||0),0);
+    }
+    return 0; // we'll show from dreEntradas instead
+  };
+
+  // Fixed costs allocated (monthly, split 50/50 for quinzena)
+  const getFixed = (mes, ano, quinz, cat) => {
+    const fc = (fixedCosts||[]).filter(c=>c.active&&(!cat||c.category===cat));
+    const total = fc.reduce((s,c)=>s+(c.value||0),0);
+    return quinz ? total/2 : total;
+  };
+
+  // Variable cost entries
+  const getVar = (mes, ano, cat) =>
+    (costEntries||[]).filter(c=>c.month===mes&&c.year===ano&&(!cat||c.category===cat)).reduce((s,c)=>s+(c.value||0),0);
+
+  // DRE entries (manual)
+  const getDRE = (mes, ano, quinz, cat) =>
+    (dreEntradas||[]).filter(e=>e.mes===mes&&e.ano===ano&&(!quinz||e.quinz===quinz)&&(!cat||e.categoria===cat)).reduce((s,e)=>s+(e.valor||0),0);
+
+  // Build P&L for a period
+  const buildPL = (mes, ano, quinz) => {
+    const receita = getComJadlog(mes, ano, quinz) + (acrescimos||[]).filter(a=>a.month===mes&&a.year===ano).reduce((s,a)=>s+(a.value||0),0)/(quinz?2:1);
+    const categorias = {};
+    COST_CATS.forEach(cat => {
+      let v = 0;
+      // From fixedCosts
+      const fc = (fixedCosts||[]).filter(c=>c.active&&c.category===cat).reduce((s,c)=>s+(c.value||0),0);
+      v += quinz ? fc/2 : fc;
+      // From costEntries
+      v += (costEntries||[]).filter(c=>c.month===mes&&c.year===ano&&c.category===cat).reduce((s,c)=>s+(c.value||0),0);
+      // From dreEntradas (manual quinzena entries)
+      v += getDRE(mes, ano, quinz||null, cat);
+      if (v > 0) categorias[cat] = v;
+    });
+    // Agregados externos from fechamentos (pago)
+    const agrExt = (fechamentos||[]).flatMap(f=>{
+      // Check if fechamento period matches roughly
+      return f.mots||[];
+    }).filter(m=>m.etapa==="pago").reduce((s,m)=>s+(m.totalBruto||0),0);
+    if (agrExt > 0 && !categorias["Agregados Externos"]) {
+      categorias["Agregados Externos"] = agrExt;
+    }
+    const totalCustos = Object.values(categorias).reduce((s,v)=>s+v,0);
+    return { receita, categorias, totalCustos, resultado: receita - totalCustos, margem: receita>0?((receita-totalCustos)/receita*100):0 };
+  };
+
+  const pl1 = buildPL(filtMes, filtAno, 1);
+  const pl2 = buildPL(filtMes, filtAno, 2);
+  const plMes = buildPL(filtMes, filtAno, null);
+
+  // Agregados da Casa - motoristas sem cadastro nos fechamentos
+  const nokMots = useMemo(() => {
+    const map = {};
+    (fechamentos||[]).forEach(f => {
+      (f.nok||[]).forEach(m => {
+        if (!map[m.mat]) map[m.mat] = { mat:m.mat, nome:m.nome, ctes:0 };
+      });
+      (f.mots||[]).filter(m=>!m.matricula&&m.nome).forEach(m => {
+        if (!map[m.nome]) map[m.nome] = { mat:m.nome, nome:m.nome, ctes:0 };
+        map[m.nome].ctes += m.totalCTEs||0;
+      });
+    });
+    return Object.values(map);
+  }, [fechamentos]);
+
+  const totalCTEsCasa = nokMots.reduce((s,m)=>s+m.ctes,0);
+  const custoAgrCasa = getDRE(filtMes, filtAno, null, "Salário Agr. Casa")
+    + getDRE(filtMes, filtAno, null, "Frota") + getDRE(filtMes, filtAno, null, "Gasolina");
+  const custoParCasa = totalCTEsCasa > 0 ? custoAgrCasa / totalCTEsCasa : 0;
+
+  const canEdit = ["director","area_manager"].includes(user.role);
+
+  // MOB terceirizada cost excel template download
+  const downloadTemplate = () => {
+    const header = ["Data","Cliente","Entrada","Saída","Nome","ID","OBS"];
+    const ex1 = ["06/04/2026","CLIENTE X","08:00","17:00","NOME FUNCIONARIO","TERCERIZADA 01",""];
+    const ex2 = ["06/04/2026","CLIENTE Y","07:00","18:00","OUTRO FUNCIONARIO","TERCERIZADA 01",""];
+    const csv = [header.join(";"), ex1.join(";"), ex2.join(";")].join("\n");
+    const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download="modelo_mob_terceirizada.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div><h1 className="text-xl font-bold text-slate-100">DRE — Demonstrativo de Resultado</h1>
+          <p className="text-sm text-slate-400">Receita × Custos por quinzena</p></div>
+        <div className="flex gap-2">
+          <Sel value={filtMes} onChange={e=>setFiltMes(Number(e.target.value))}>
+            {MONTHS.slice(1).map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+          </Sel>
+          <Sel value={filtAno} onChange={e=>setFiltAno(Number(e.target.value))}>
+            {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+          </Sel>
+          {canEdit&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Lançar Custo</Btn>}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {[["quinzena","📊 Por Quinzena"],["categorias","🗂 Por Categoria"],["agrcasa","🏠 Agregados da Casa"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setTab(v)}
+            className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")}>{l}</button>
+        ))}
+      </div>
+
+      {/* POR QUINZENA */}
+      {tab==="quinzena"&&(
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <PLCard label={"1ª Quinzena — "+MONTHS[filtMes]+"/"+filtAno+" (dias 1-15)"} pl={pl1}/>
+            <PLCard label={"2ª Quinzena — "+MONTHS[filtMes]+"/"+filtAno+" (dias 16-31)"} pl={pl2}/>
+            <PLCard label={"Total Mês — "+MONTHS[filtMes]+"/"+filtAno} pl={plMes} highlight/>
+          </div>
+          {/* Lançamentos do mês */}
+          <Card className="p-4">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">📋 Lançamentos variáveis do mês</p>
+            {(dreEntradas||[]).filter(e=>e.mes===filtMes&&e.ano===filtAno).length===0&&(
+              <p className="text-slate-500 text-xs text-center py-4">Nenhum lançamento. Clique em "Lançar Custo" para adicionar.</p>
+            )}
+            <div className="space-y-2">
+              {(dreEntradas||[]).filter(e=>e.mes===filtMes&&e.ano===filtAno).sort((a,b)=>a.quinz-b.quinz).map(e=>(
+                <div key={e.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{background:CAT_COLORS[e.categoria]||"#94a3b8"}}/>
+                    <div>
+                      <p className="text-sm text-slate-200 font-medium">{e.descricao}</p>
+                      <p className="text-xs text-slate-500">{e.categoria} · {e.quinz===1?"1ª Quinzena":e.quinz===2?"2ª Quinzena":"Mês inteiro"} · {MONTHS[e.mes]}/{e.ano}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-red-400 font-bold">{fmt(e.valor)}</span>
+                    {canEdit&&<button onClick={()=>setDreEntradas(p=>p.filter(x=>x.id!==e.id))} className="text-slate-600 hover:text-red-400"><Trash2 size={13}/></button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* POR CATEGORIA */}
+      {tab==="categorias"&&(
+        <div className="space-y-3">
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
+            💡 Custos fixos são divididos em 2 para cada quinzena. Lançamentos com quinzena específica aplicam somente nela.
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-slate-700 text-slate-400 text-xs">
+                {["Categoria","1ª Quinzena","2ª Quinzena","Total Mês","% da Receita"].map(h=>(
+                  <th key={h} className={"py-2 px-3 font-semibold "+(h==="Categoria"?"text-left":"text-right")}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {/* Receita row */}
+                <tr className="border-b border-slate-700 bg-emerald-500/5">
+                  <td className="py-3 px-3 font-bold text-emerald-400">✦ Comissão Jadlog</td>
+                  <td className="py-3 px-3 text-right text-emerald-400 font-bold">{fmt(pl1.receita)}</td>
+                  <td className="py-3 px-3 text-right text-emerald-400 font-bold">{fmt(pl2.receita)}</td>
+                  <td className="py-3 px-3 text-right text-emerald-400 font-bold text-base">{fmt(plMes.receita)}</td>
+                  <td className="py-3 px-3 text-right text-emerald-400">100%</td>
+                </tr>
+                {/* Cost rows */}
+                {COST_CATS.map(cat => {
+                  const v1 = pl1.categorias[cat]||0;
+                  const v2 = pl2.categorias[cat]||0;
+                  const vM = v1+v2;
+                  if (vM===0) return null;
+                  const pct = plMes.receita>0?(vM/plMes.receita*100):0;
+                  return (
+                    <tr key={cat} className="border-b border-slate-800 hover:bg-slate-800/30">
+                      <td className="py-2.5 px-3 text-slate-300 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{background:CAT_COLORS[cat]||"#94a3b8"}}/>
+                        {cat}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-red-400">{v1>0?fmt(v1):"—"}</td>
+                      <td className="py-2.5 px-3 text-right text-red-400">{v2>0?fmt(v2):"—"}</td>
+                      <td className="py-2.5 px-3 text-right text-red-400 font-semibold">{fmt(vM)}</td>
+                      <td className="py-2.5 px-3 text-right text-slate-400">{pct.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
+                {/* Total */}
+                <tr className="bg-slate-700/30 border-t-2 border-slate-600">
+                  <td className="py-3 px-3 font-bold text-slate-200">Total Custos</td>
+                  <td className="py-3 px-3 text-right text-red-400 font-bold">{fmt(pl1.totalCustos)}</td>
+                  <td className="py-3 px-3 text-right text-red-400 font-bold">{fmt(pl2.totalCustos)}</td>
+                  <td className="py-3 px-3 text-right text-red-400 font-bold text-base">{fmt(plMes.totalCustos)}</td>
+                  <td className="py-3 px-3 text-right text-red-400">{plMes.receita>0?(plMes.totalCustos/plMes.receita*100).toFixed(1)+"%" :"—"}</td>
+                </tr>
+                {/* Resultado */}
+                <tr className="bg-slate-800/50">
+                  <td className="py-3 px-3 font-bold text-slate-100 text-base">★ Resultado</td>
+                  <td className={"py-3 px-3 text-right font-bold text-lg "+(pl1.resultado>=0?"text-emerald-400":"text-red-400")}>{fmt(pl1.resultado)}</td>
+                  <td className={"py-3 px-3 text-right font-bold text-lg "+(pl2.resultado>=0?"text-emerald-400":"text-red-400")}>{fmt(pl2.resultado)}</td>
+                  <td className={"py-3 px-3 text-right font-bold text-xl "+(plMes.resultado>=0?"text-emerald-400":"text-red-400")}>{fmt(plMes.resultado)}</td>
+                  <td className={"py-3 px-3 text-right font-bold "+(plMes.margem>=0?"text-emerald-400":"text-red-400")}>{plMes.margem.toFixed(1)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* AGREGADOS DA CASA */}
+      {tab==="agrcasa"&&(
+        <div className="space-y-4">
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+            <p className="text-sm font-bold text-amber-300 mb-2">🏠 Agregados da Casa — Custo por CTE</p>
+            <p className="text-xs text-slate-400">São os motoristas sem cadastro que aparecem nos fechamentos. O custo deles = Salário + Frota + Gasolina lançados com essas categorias no mês.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <KpiCard compact label="Motoristas s/ Cadastro" value={String(nokMots.length)} icon={Users} color="#f59e0b"/>
+            <KpiCard compact label="CTEs entregues" value={String(totalCTEsCasa)} icon={Truck} color="#60a5fa"/>
+            <KpiCard compact label="Custo Total (Sal+Frota+Gas)" value={fmt(custoAgrCasa)} icon={DollarSign} color="#ef4444"/>
+            <KpiCard compact label="Custo por CTE" value={custoParCasa>0?fmt(custoParCasa):"—"} icon={TrendingUp} color={custoParCasa>0?"#10b981":"#94a3b8"}/>
+          </div>
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
+            💡 Para calcular o custo por CTE dos Agregados da Casa, lance os custos de <strong>Salário Agr. Casa</strong>, <strong>Frota</strong> e <strong>Gasolina</strong> no botão "Lançar Custo" acima.
+          </div>
+          {nokMots.length>0&&(
+            <Card className="p-4">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Motoristas sem cadastro</p>
+              <table className="w-full text-xs">
+                <thead><tr className="border-b border-slate-700 text-slate-400">
+                  <th className="text-left py-2 px-2">Nome/Matrícula</th>
+                  <th className="text-right py-2 px-2">CTEs</th>
+                  <th className="text-right py-2 px-2">Custo estimado</th>
+                </tr></thead>
+                <tbody>
+                  {nokMots.map(m=>(
+                    <tr key={m.mat} className="border-b border-slate-800">
+                      <td className="py-2 px-2 text-amber-400 font-medium">{m.nome} {m.mat&&m.mat!==m.nome&&<span className="text-slate-500">(Mat. {m.mat})</span>}</td>
+                      <td className="py-2 px-2 text-right text-slate-300">{m.ctes}</td>
+                      <td className="py-2 px-2 text-right text-red-400">{custoParCasa>0&&m.ctes>0?fmt(custoParCasa*m.ctes):"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Modal Lançar Custo */}
+      {showNew&&(
+        <DRENovaEntrada onSave={e=>{setDreEntradas(p=>[...p,{...e,id:uid()}]);setShowNew(false);}} onClose={()=>setShowNew(false)} defaultMes={filtMes} defaultAno={filtAno}/>
+      )}
+    </div>
+  );
+}
+
+function DRENovaEntrada({ onSave, onClose, defaultMes, defaultAno }) {
+  const [f, setF] = useState({ categoria:"CLT", descricao:"", valor:"", mes:defaultMes, ano:defaultAno, quinz:0 });
+  const sf = (k,v) => setF(p=>({...p,[k]:v}));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={e=>e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-100">Lançar Custo</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <Sel label="Categoria" value={f.categoria} onChange={e=>sf("categoria",e.target.value)}>
+            {COST_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+          </Sel>
+          <Sel label="Quinzena" value={f.quinz} onChange={e=>sf("quinz",Number(e.target.value))}>
+            <option value={0}>Mês inteiro</option>
+            <option value={1}>1ª Quinzena</option>
+            <option value={2}>2ª Quinzena</option>
+          </Sel>
+        </div>
+        <Input label="Descrição" placeholder="Ex: Salário João — Motorista Casa" value={f.descricao} onChange={e=>sf("descricao",e.target.value)}/>
+        <Input label="Valor (R$)" type="number" step="0.01" value={f.valor} onChange={e=>sf("valor",e.target.value)}/>
+        <div className="grid grid-cols-2 gap-3">
+          <Sel label="Mês" value={f.mes} onChange={e=>sf("mes",Number(e.target.value))}>
+            {["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"].map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+          </Sel>
+          <Input label="Ano" type="number" value={f.ano} onChange={e=>sf("ano",Number(e.target.value))}/>
+        </div>
+        <div className="flex gap-3 pt-1">
+          <Btn className="flex-1 justify-center" disabled={!f.descricao||!f.valor}
+            onClick={()=>onSave({...f,valor:Number(f.valor)})}>Salvar</Btn>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobView({ user, mobBases, setMobBases, mobAprovado, setMobAprovado, mobCustos, setMobCustos }) {
+  const [tab, setTab]         = useState("conferencia");
+  const [importing, setImporting] = useState("");
+  const [importMsg, setImportMsg] = useState("");
+  const [filtData, setFiltData]   = useState("");
+  const [filtCliente, setFiltCliente] = useState("todos");
+  const [filtTipo, setFiltTipo]   = useState("todos");
+  const [horaExtra, setHoraExtra] = useState(8);
+  const fileRefOp   = useRef();
+  const fileRefTerc = useRef();
+  const fileRefAprov = useRef();
+
+  const downloadTemplate = () => {
+    const header = ["Data","Cliente","Entrada","Saída","Nome","ID","OBS"];
+    const rows = [
+      ["06/04/2026","CLIENTE X","08:00","17:00","NOME DO FUNCIONARIO","TERCERIZADA 01",""],
+      ["06/04/2026","CLIENTE Y","21:00","08:00","OUTRO FUNCIONARIO","TERCERIZADA 01","turno noturno"],
+    ];
+    const csv = [header.join(";"), ...rows.map(r=>r.join(";"))].join("\n");
+    const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download="modelo_ponto_terceirizada.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Custos da terceirizada: {id, empresa, mes, ano, valorTotal, descricao}
+  const [showCusto, setShowCusto] = useState(false);
+  const [custForm, setCustForm] = useState({empresa:"TERCERIZADA 01",mes:new Date().getMonth()+1,ano:new Date().getFullYear(),valorTotal:"",descricao:""});
+
+  const parseTime = v => {
+    if (!v) return null;
+    const s = String(v);
+    const m = s.match(/(\d+):(\d+)/);
+    if (!m) return null;
+    return parseInt(m[1]) + parseInt(m[2]) / 60;
+  };
+
+  const importBase = async (file, tipo) => {
+    setImporting(tipo); setImportMsg("");
+    try {
+      const buf = await file.arrayBuffer();
+      const { read, utils } = window.XLSX;
+      const wb = read(buf);
+      const shName = wb.SheetNames.includes("DADOS_LANCADOS") ? "DADOS_LANCADOS" : wb.SheetNames[0];
+      const raw = utils.sheet_to_json(wb.Sheets[shName], { header:1, defval:"", raw:false });
+      const hdr = (raw[0]||[]).map(h => String(h||"").toLowerCase());
+      const gi = name => hdr.findIndex(h => h.includes(name));
+      const iD=gi("data"), iC=gi("cliente"), iE=gi("entrada"), iS=gi("saida"), iN=gi("nome"), iI=gi("id");
+      const rows = [];
+      for (let i=1; i<raw.length; i++) {
+        const r = raw[i];
+        const data   = String(r[iD]||"").slice(0,10);
+        const cliente= String(r[iC]||"").trim().toUpperCase();
+        const nome   = String(r[iN]||"").trim().toUpperCase();
+        const idTipo = String(r[iI]||"").trim();
+        const entStr = String(r[iE]||"");
+        const saiStr = String(r[iS]||"");
+        const entrada= parseTime(entStr);
+        const saida  = parseTime(saiStr);
+        if (!data || !nome) continue;
+        let horas = null;
+        if (entrada!==null && saida!==null) horas = saida>=entrada ? saida-entrada : 24-entrada+saida;
+        rows.push({ id:uid(), data, cliente, nome, idTipo, entrada:entStr, saida:saiStr, horas });
+      }
+      setMobBases(p => [...p.filter(b=>b.tipo!==tipo), { id:uid(), tipo, arquivo:file.name, importadoEm:now(), rows }]);
+      setImportMsg("✅ " + tipo + ": " + rows.length + " lançamentos");
+    } catch(e) { setImportMsg("❌ " + String(e.message||e)); }
+    setImporting("");
+    if(fileRefOp.current) fileRefOp.current.value="";
+    if(fileRefTerc.current) fileRefTerc.current.value="";
+  };
+
+  const importAprovado = async file => {
+    setImporting("aprovado");
+    try {
+      const buf = await file.arrayBuffer();
+      const { read, utils } = window.XLSX;
+      const wb = read(buf);
+      const shName = wb.SheetNames.includes("APROVADO") ? "APROVADO" : wb.SheetNames[0];
+      const raw = utils.sheet_to_json(wb.Sheets[shName], { header:1, defval:"" });
+      const rows = [];
+      for (let i=1; i<raw.length; i++) {
+        const r = raw[i];
+        const cliente = String(r[0]||"").trim().toUpperCase();
+        if (!cliente) continue;
+        rows.push({ cliente, terc1:Number(r[1])||0, terc2:Number(r[2])||0, clt:Number(r[3])||0,
+          total:(Number(r[1])||0)+(Number(r[2])||0)+(Number(r[3])||0) || Number(r[4])||0 });
+      }
+      setMobAprovado(rows);
+      setImportMsg("✅ Aprovado: " + rows.length + " clientes");
+    } catch(e) { setImportMsg("❌ " + String(e.message||e)); }
+    setImporting("");
+    if(fileRefAprov.current) fileRefAprov.current.value="";
+  };
+
+  // Flatten all rows — use useMemo to keep stable reference
+  const allRows = useMemo(() =>
+    (mobBases||[]).flatMap(b => (b.rows||[]).map(r => ({ ...r, baseTipo: String(b.tipo||"") }))),
+    [mobBases]
+  );
+
+  const clientes = useMemo(() => [...new Set(allRows.map(r=>r.cliente))].filter(Boolean).sort(), [allRows]);
+  const dates    = useMemo(() => [...new Set(allRows.map(r=>r.data))].filter(Boolean).sort(), [allRows]);
+
+  const filtered = useMemo(() => allRows.filter(r => {
+    if (filtData && r.data !== filtData) return false;
+    if (filtCliente !== "todos" && r.cliente !== filtCliente) return false;
+    if (filtTipo !== "todos" && r.baseTipo !== filtTipo) return false;
+    return true;
+  }), [allRows, filtData, filtCliente, filtTipo]);
+
+  // Group by date+cliente for conference view
+  const confRows = useMemo(() => {
+    const map = {};
+    allRows.forEach(r => {
+      const k = r.data + "||" + r.cliente;
+      if (!map[k]) map[k] = { data:r.data, cliente:r.cliente, pessoas:[] };
+      map[k].pessoas.push(r);
+    });
+    return Object.values(map).sort((a,b)=>a.data.localeCompare(b.data)||a.cliente.localeCompare(b.cliente));
+  }, [allRows]);
+
+  // Overtime rows
+  const overtimeRows = useMemo(() => {
+    const map = {};
+    allRows.forEach(r => {
+      if (r.horas===null) return;
+      const k = r.data + "||" + r.nome;
+      if (!map[k]) map[k] = { data:r.data, nome:r.nome, cliente:r.cliente, baseTipo:r.baseTipo, idTipo:r.idTipo, totalH:0, entrada:r.entrada, saida:r.saida };
+      map[k].totalH += r.horas;
+    });
+    return Object.values(map).map(row => ({ ...row, extra: Math.max(0, row.totalH-horaExtra), isExtra: row.totalH>horaExtra }))
+      .sort((a,b)=>a.data.localeCompare(b.data));
+  }, [allRows, horaExtra]);
+
+  // Divergências between op and terc
+  const discrepancias = useMemo(() => {
+    const baseOp   = (mobBases||[]).find(b=>b.tipo==="operador");
+    const baseTerc = (mobBases||[]).find(b=>b.tipo==="terceirizada");
+    if (!baseOp || !baseTerc) return [];
+    const opMap={}, tercMap={};
+    (baseOp.rows||[]).forEach(r   => { opMap[r.data+"||"+r.cliente+"||"+r.nome]=r; });
+    (baseTerc.rows||[]).forEach(r => { tercMap[r.data+"||"+r.cliente+"||"+r.nome]=r; });
+    const disc = [];
+    Object.keys(opMap).forEach(k => {
+      if (!tercMap[k]) disc.push({ key:k, nome:opMap[k].nome, cliente:opMap[k].cliente, data:opMap[k].data, tipo:"só_op" });
+      else if (opMap[k].horas!==null && tercMap[k].horas!==null && Math.abs(opMap[k].horas-tercMap[k].horas)>0.5)
+        disc.push({ key:k, nome:opMap[k].nome, cliente:opMap[k].cliente, data:opMap[k].data, tipo:"horas_div",
+          hOp: opMap[k].horas.toFixed(1), hT: tercMap[k].horas.toFixed(1) });
+    });
+    Object.keys(tercMap).forEach(k => {
+      if (!opMap[k]) disc.push({ key:k, nome:tercMap[k].nome, cliente:tercMap[k].cliente, data:tercMap[k].data, tipo:"só_terc" });
+    });
+    return disc.sort((a,b)=>a.data.localeCompare(b.data));
+  }, [mobBases]);
+
+  const baseOp   = (mobBases||[]).find(b=>b.tipo==="operador");
+  const baseTerc = (mobBases||[]).find(b=>b.tipo==="terceirizada");
+  const extraTotal = overtimeRows.filter(r=>r.isExtra).length;
+
+  return (
+    <div className="p-6 space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">Mão de Obra — Conferência</h1>
+          <p className="text-sm text-slate-400">{allRows.length} lançamentos · {baseOp?"✅ Minha base":"⚠ Minha base"} · {baseTerc?"✅ Terceirizada":"⚠ Terceirizada"}</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Btn size="sm" variant="secondary" onClick={downloadTemplate}>
+            <Download size={13}/>Modelo p/ Terceirizada
+          </Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>setShowCusto(true)}>
+            <DollarSign size={13}/>Lançar Custo Terc.
+          </Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>fileRefAprov.current?.click()} disabled={!!importing}>
+            <Upload size={13}/>{importing==="aprovado"?"...":"Importar Aprovado"}
+          </Btn>
+          <Btn size="sm" onClick={()=>fileRefOp.current?.click()} disabled={!!importing}>
+            <Upload size={13}/>{importing==="operador"?"...":"Minha Base"}
+          </Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>fileRefTerc.current?.click()} disabled={!!importing}>
+            <Upload size={13}/>{importing==="terceirizada"?"...":"Base Terceirizada"}
+          </Btn>
+          <input ref={fileRefOp}    type="file" accept=".xlsx,.xls" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)importBase(f,"operador");}}/>
+          <input ref={fileRefTerc}  type="file" accept=".xlsx,.xls" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)importBase(f,"terceirizada");}}/>
+          <input ref={fileRefAprov} type="file" accept=".xlsx,.xls" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)importAprovado(f);}}/>
+        </div>
+      </div>
+      {importMsg&&<div className={`text-xs px-3 py-2 rounded-lg border ${importMsg.startsWith("✅")?"bg-emerald-500/10 border-emerald-500/30 text-emerald-300":"bg-red-500/10 border-red-500/30 text-red-300"}`}>{importMsg}</div>}
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard compact label="Lançamentos" value={String(allRows.length)} icon={Users} color="#60a5fa"/>
+        <KpiCard compact label="Hora Extra" value={extraTotal + " pessoa(s)"} icon={Clock} color="#f59e0b"/>
+        <KpiCard compact label="Divergências" value={String(discrepancias.length)} icon={AlertCircle} color={discrepancias.length>0?"#ef4444":"#10b981"}/>
+        <KpiCard compact label="Clientes" value={String(clientes.length)} icon={Building2} color="#8b5cf6"/>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex gap-3 flex-wrap items-center">
+        <select value={filtData} onChange={e=>setFiltData(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+          <option value="">Todas as datas</option>
+          {dates.map(d=><option key={d} value={d}>{d}</option>)}
+        </select>
+        <select value={filtCliente} onChange={e=>setFiltCliente(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+          <option value="todos">Todos os Clientes</option>
+          {clientes.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filtTipo} onChange={e=>setFiltTipo(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+          <option value="todos">Ambas as Bases</option>
+          <option value="operador">Minha Base</option>
+          <option value="terceirizada">Terceirizada</option>
+        </select>
+        <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5">
+          <span className="text-xs text-slate-400">HE após</span>
+          <input type="number" min="4" max="12" step="0.5" value={horaExtra}
+            onChange={e=>setHoraExtra(Number(e.target.value)||8)}
+            className="w-10 bg-transparent text-xs text-amber-400 font-bold text-center focus:outline-none"/>
+          <span className="text-xs text-slate-400">h/dia</span>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {[["conferencia","🔍 Conferência"],["divergencias","⚠ Divergências"],["horaextra","⏰ Hora Extra"],["aprovado","📋 Aprovado × Real"],["lancamentos","📄 Lançamentos"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setTab(v)}
+            className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")}>
+            {l}{v==="divergencias"&&discrepancias.length>0?" ("+discrepancias.length+")":""}{v==="horaextra"&&extraTotal>0?" ("+extraTotal+")":""}
+          </button>
+        ))}
+      </div>
+
+      {/* CONFERÊNCIA */}
+      {tab==="conferencia"&&(
+        <div className="space-y-2">
+          {allRows.length===0&&<p className="text-slate-500 text-sm text-center py-10">Importe "Minha Base" para começar.</p>}
+          {confRows.filter(r=>{
+            if (filtData && r.data!==filtData) return false;
+            if (filtCliente!=="todos" && r.cliente!==filtCliente) return false;
+            return true;
+          }).map(row=>{
+            const opP   = row.pessoas.filter(p=>p.baseTipo==="operador");
+            const tercP = row.pessoas.filter(p=>p.baseTipo==="terceirizada");
+            const aprov = (mobAprovado||[]).find(a=>a.cliente===row.cliente);
+            const real  = new Set(row.pessoas.map(p=>p.nome)).size;
+            const apQtd = aprov ? Number(aprov.total)||0 : null;
+            const diff  = apQtd!==null ? real-apQtd : null;
+            return (
+              <Card key={row.data+"_"+row.cliente} className="p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-slate-100 text-sm">{row.cliente}</p>
+                      <span className="text-xs text-slate-500">{row.data}</span>
+                      {diff!==null&&<span className={"text-xs font-bold px-2 py-0.5 rounded "+(diff===0?"bg-emerald-500/20 text-emerald-400":diff>0?"bg-blue-500/20 text-blue-400":"bg-red-500/20 text-red-400")}>
+                        {diff===0?"✓ OK":diff>0?"+"+diff+" acima":diff+" faltou"}
+                      </span>}
+                    </div>
+                    <div className="flex gap-6 mt-2 text-xs flex-wrap">
+                      {opP.length>0&&<div>
+                        <p className="text-slate-400 mb-1">Minha base ({opP.length})</p>
+                        {opP.map(p=>{
+                          const he = p.horas!==null && p.horas>horaExtra;
+                          return <p key={p.id} className={he?"text-amber-400 font-semibold":"text-slate-300"}>· {p.nome}{p.horas!==null?" ("+p.horas.toFixed(1)+"h"+(he?" ⚡":"")+")":" (sem horário)"}</p>;
+                        })}
+                      </div>}
+                      {tercP.length>0&&<div>
+                        <p className="text-blue-400 mb-1">Terceirizada ({tercP.length})</p>
+                        {tercP.map(p=>{
+                          const he = p.horas!==null && p.horas>horaExtra;
+                          return <p key={p.id} className={he?"text-amber-400 font-semibold":"text-slate-300"}>· {p.nome}{p.horas!==null?" ("+p.horas.toFixed(1)+"h"+(he?" ⚡":"")+")":" (sem horário)"}</p>;
+                        })}
+                      </div>}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs flex-shrink-0">
+                    {apQtd!==null&&<p className="text-slate-400">Aprovado: <span className="text-slate-200 font-bold">{apQtd}</span></p>}
+                    <p className="text-slate-400">Real: <span className="text-slate-200 font-bold">{real}</span></p>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* DIVERGÊNCIAS */}
+      {tab==="divergencias"&&(
+        <div className="space-y-2">
+          {!baseOp&&!baseTerc&&<div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 text-sm text-amber-300">Importe minha base e a da terceirizada para comparar.</div>}
+          {baseOp&&baseTerc&&discrepancias.length===0&&<p className="text-emerald-400 text-sm text-center py-8">✅ Nenhuma divergência encontrada!</p>}
+          {discrepancias.map(d=>(
+            <Card key={d.key} className={"p-4 border-l-4 "+(d.tipo==="só_op"?"border-blue-500":d.tipo==="só_terc"?"border-orange-500":"border-amber-500")}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">{d.nome}</p>
+                  <p className="text-xs text-slate-400">{d.cliente} · {d.data}</p>
+                  <p className="text-xs text-amber-400 mt-0.5">
+                    {d.tipo==="só_op"?"Só na minha base":d.tipo==="só_terc"?"Só na base terceirizada":"Horas divergem: minha="+d.hOp+"h · terc="+d.hT+"h"}
+                  </p>
+                </div>
+                <span className={"text-xs font-bold px-2 py-1 rounded "+(d.tipo==="só_op"?"bg-blue-500/20 text-blue-400":d.tipo==="só_terc"?"bg-orange-500/20 text-orange-400":"bg-amber-500/20 text-amber-400")}>
+                  {d.tipo==="só_op"?"Só Minha":d.tipo==="só_terc"?"Só Terc.":"Horas ≠"}
+                </span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* HORA EXTRA */}
+      {tab==="horaextra"&&(
+        <div className="space-y-3">
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300">
+            ⚡ Hora extra = acima de {horaExtra}h/dia. Ajuste o limite no filtro acima.
+          </div>
+          {overtimeRows.filter(r=>r.isExtra&&(!filtData||r.data===filtData)&&(filtCliente==="todos"||r.cliente===filtCliente)).length===0&&(
+            <p className="text-emerald-400 text-sm text-center py-6">Nenhuma hora extra encontrada.</p>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-slate-700 text-slate-400">
+                {["Data","Nome","Cliente","Base","Entrada→Saída","Total","Extra","Tipo"].map(h=>(
+                  <th key={h} className={"py-2 px-2 font-semibold "+(["Nome","Cliente"].includes(h)?"text-left":"text-right")}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {overtimeRows.filter(r=>r.isExtra&&(!filtData||r.data===filtData)&&(filtCliente==="todos"||r.cliente===filtCliente)).map((r,i)=>(
+                  <tr key={r.data+"_"+r.nome+"_"+i} className="border-b border-slate-800 bg-amber-500/5">
+                    <td className="py-2 px-2 text-slate-400">{r.data}</td>
+                    <td className="py-2 px-2 font-semibold text-amber-400">{r.nome}</td>
+                    <td className="py-2 px-2 text-slate-300">{r.cliente}</td>
+                    <td className="py-2 px-2 text-right text-slate-400">{r.baseTipo==="operador"?"Minha":"Terc."}</td>
+                    <td className="py-2 px-2 text-right text-slate-400">{r.entrada||"—"} → {r.saida||"—"}</td>
+                    <td className="py-2 px-2 text-right text-slate-200 font-bold">{r.totalH.toFixed(1)}h</td>
+                    <td className="py-2 px-2 text-right text-amber-400 font-bold">+{r.extra.toFixed(1)}h</td>
+                    <td className="py-2 px-2 text-right text-slate-400 text-xs">{r.idTipo||"—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* APROVADO vs REALIZADO */}
+      {tab==="aprovado"&&(
+        <div className="space-y-3">
+          {(mobAprovado||[]).length===0&&<div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-sm text-blue-300">Importe a planilha com aba "APROVADO" clicando em "Importar Aprovado".</div>}
+          {(mobAprovado||[]).map(ap=>{
+            const pessoasReal = allRows.filter(r=>r.cliente===ap.cliente&&(!filtData||r.data===filtData));
+            const realTotal   = new Set(pessoasReal.map(r=>r.nome)).size;
+            const diff = realTotal - (Number(ap.total)||0);
+            return (
+              <Card key={ap.cliente} className="p-4 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-semibold text-slate-100">{ap.cliente}</p>
+                  <p className="text-xs text-slate-500">CLT: {Number(ap.clt)||0} · Terc.1: {Number(ap.terc1)||0} · Terc.2: {Number(ap.terc2)||0}</p>
+                </div>
+                <div className="flex items-center gap-5 text-sm">
+                  <div className="text-center"><p className="text-xs text-slate-400">Aprovado</p><p className="font-bold text-slate-200">{Number(ap.total)||0}</p></div>
+                  <div className="text-center"><p className="text-xs text-slate-400">Realizado</p><p className={"font-bold "+(diff===0?"text-emerald-400":diff>0?"text-blue-400":"text-red-400")}>{realTotal}</p></div>
+                  <span className={"text-xs font-bold px-3 py-1.5 rounded-lg "+(diff===0?"bg-emerald-500/20 text-emerald-400":diff>0?"bg-blue-500/20 text-blue-400":"bg-red-500/20 text-red-400")}>
+                    {diff===0?"✓ OK":diff>0?"+"+diff+" acima":diff+" faltou"}
+                  </span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* LANÇAMENTOS */}
+      {tab==="lancamentos"&&(
+        <div className="space-y-2">
+          <p className="text-xs text-slate-400">{filtered.length} registros</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-slate-700 text-slate-400">
+                {["Data","Nome","Cliente","Tipo","Entrada","Saída","Horas","Base"].map(h=>(
+                  <th key={h} className={"py-2 px-2 font-semibold "+(["Nome","Cliente"].includes(h)?"text-left":"text-right")}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {filtered.slice(0,300).map(r=>{
+                  const he = r.horas!==null && r.horas>horaExtra;
+                  return (
+                    <tr key={r.id} className={"border-b border-slate-800 hover:bg-slate-800/40 "+(he?"bg-amber-500/5":"")}>
+                      <td className="py-1.5 px-2 text-slate-400">{r.data}</td>
+                      <td className="py-1.5 px-2 font-semibold text-slate-200">{r.nome}{he?" ⚡":""}</td>
+                      <td className="py-1.5 px-2 text-slate-300">{r.cliente}</td>
+                      <td className="py-1.5 px-2 text-right text-slate-400">{r.idTipo}</td>
+                      <td className="py-1.5 px-2 text-right text-slate-400">{r.entrada||"—"}</td>
+                      <td className="py-1.5 px-2 text-right text-slate-400">{r.saida||"—"}</td>
+                      <td className={"py-1.5 px-2 text-right font-semibold "+(he?"text-amber-400":"text-slate-300")}>{r.horas!==null?r.horas.toFixed(1)+"h":"—"}</td>
+                      <td className="py-1.5 px-2 text-right">
+                        <span className={"px-1.5 py-0.5 rounded text-xs "+(r.baseTipo==="operador"?"bg-blue-500/20 text-blue-400":"bg-orange-500/20 text-orange-400")}>
+                          {r.baseTipo==="operador"?"Minha":"Terc."}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filtered.length>300&&<p className="text-xs text-slate-500 text-center py-2">Exibindo 300 de {filtered.length}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOS TERCEIRIZADA modal */}
+      {showCusto&&(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={()=>setShowCusto(false)}>
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={e=>e.stopPropagation()}>
+            <h3 className="text-base font-bold text-slate-100">Lançar Custo Terceirizada</h3>
+            <Input label="Empresa" value={custForm.empresa} onChange={e=>setCustForm(p=>({...p,empresa:e.target.value}))}/>
+            <Input label="Valor Total (R$)" type="number" step="0.01" value={custForm.valorTotal} onChange={e=>setCustForm(p=>({...p,valorTotal:e.target.value}))}/>
+            <Input label="Descrição" placeholder="Ex: Fatura IS — Abril" value={custForm.descricao} onChange={e=>setCustForm(p=>({...p,descricao:e.target.value}))}/>
+            <div className="grid grid-cols-2 gap-3">
+              <Sel label="Mês" value={custForm.mes} onChange={e=>setCustForm(p=>({...p,mes:Number(e.target.value)}))}>
+                {["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"].map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+              </Sel>
+              <Input label="Ano" type="number" value={custForm.ano} onChange={e=>setCustForm(p=>({...p,ano:Number(e.target.value)}))}/>
+            </div>
+            {/* Show base from MOB for comparison */}
+            {baseTerc&&(
+              <div className="bg-slate-900 rounded-lg p-3 text-xs text-slate-400 border border-slate-700">
+                <p className="font-semibold text-slate-300 mb-1">Base importada: {baseTerc.arquivo}</p>
+                <p>{baseTerc.rows?.length||0} lançamentos · {new Set(baseTerc.rows?.map(r=>r.nome)||[]).size} pessoas</p>
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <Btn className="flex-1 justify-center" disabled={!custForm.empresa||!custForm.valorTotal}
+                onClick={()=>{
+                  setMobCustos(p=>[...p,{...custForm,id:uid(),valor:Number(custForm.valorTotal),categoria:"Terceirizado"}]);
+                  setShowCusto(false);
+                  setCustForm(p=>({...p,valorTotal:"",descricao:""}));
+                }}>Salvar</Btn>
+              <Btn variant="secondary" onClick={()=>setShowCusto(false)}>Cancelar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OpsControl() {
   const [portalMode, setPortalMode] = useState(null);
   const [showPortalEntry, setShowPortalEntry] = useState(false);
@@ -5855,6 +7185,10 @@ export default function OpsControl() {
   const [unidades, setUnidades] = useLS("unidades", SEED.unidades);
   const [faturamentosJadlog, setFaturamentosJadlog] = useLS("faturamentosJadlog", SEED.faturamentosJadlog);
   const [acrescimos, setAcrescimos] = useLS("acrescimos", []);
+  const [mobBases, setMobBases] = useLS("mobBases", []);
+  const [mobAprovado, setMobAprovado] = useLS("mobAprovado", []);
+  const [mobCustos, setMobCustos] = useLS("mobCustos", []);       // custos por terceirizada
+  const [dreEntradas, setDreEntradas] = useLS("dreEntradas", []); // lançamentos por quinzena
 
   const navigateToTask = id => { setOpenTaskId(id); setView("tasks"); };
 
@@ -6012,7 +7346,8 @@ export default function OpsControl() {
         {view==="revenue"&&hasF&&<RevenueView user={liveUser} acrescimos={acrescimos} setAcrescimos={setAcrescimos} clients={clients} faturamentosJadlog={faturamentosJadlog}/>}
         {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos} forecastEntries={forecastEntries}/>}
         {view==="forecast"&&hasF&&<ForecastView clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
-        {view==="fechamento"&&<FechamentoView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} motoristas={motoristas} setMotoristas={setMotoristas}/>}
+        {view==="fechamento"&&<FechamentoView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} motoristas={motoristas} setMotoristas={setMotoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
+        {view==="mob"&&<MobView user={liveUser} mobBases={mobBases} setMobBases={setMobBases} mobAprovado={mobAprovado} setMobAprovado={setMobAprovado} mobCustos={mobCustos} setMobCustos={setMobCustos}/>}
         {view==="fatjadlog"&&hasF&&<FatJadlogView user={liveUser} faturamentos={faturamentosJadlog} setFaturamentos={setFaturamentosJadlog} unidades={unidades} setUnidades={setUnidades} clients={clients}/>}
         {view==="pagamentos"&&hasF&&<PagamentosView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} tasks={tasks} setTasks={setTasks} users={users} clients={clients} motoristas={motoristas}/>}
         {view==="admin"&&liveUser.role==="director"&&<AdminView areas={areas} setAreas={setAreas} users={users} setUsers={setUsers} clients={clients} setClients={setClients} templates={templates} setTemplates={setTemplates}/>}
