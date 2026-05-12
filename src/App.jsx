@@ -3421,7 +3421,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""} ` }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -6091,13 +6091,13 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[
-          ["agr",        `🟣 Ciência Agregado${motsAgr.length>0?` (${motsAgr.length})`:""}`,              motsAgr.length>0],
-          ["agregados",  `💰 Pagar${motsFin.length>0?` (${motsFin.length})`:""}`,                        motsFin.length>0],
-          ["contestados",`⚠ Contestados${motsContestados.length>0?` (${motsContestados.length})`:""}`,   motsContestados.length>0],
-          ["internos",   `🔄 Em Revisão${motsInternal.length>0?` (${motsInternal.length})`:""}`,          motsInternal.length>0],
-          ["tarefas",    `📋 Tarefas${tasksPendPag.length>0?` (${tasksPendPag.length})`:""}`,              tasksPendPag.length>0],
+          ["agr",        "🟣 Ciência Agregado"+(motsAgr.length>0?" ("+motsAgr.length+")":""),              motsAgr.length>0],
+          ["agregados",  "💰 Pagar"+(motsFin.length>0?" ("+motsFin.length+")":""),                        motsFin.length>0],
+          ["contestados","⚠ Contestados"+(motsContestados.length>0?" ("+motsContestados.length+")":""),   motsContestados.length>0],
+          ["internos",   "🔄 Em Revisão"+(motsInternal.length>0?" ("+motsInternal.length+")":""),          motsInternal.length>0],
+          ["tarefas",    "📋 Tarefas"+(tasksPendPag.length>0?" ("+tasksPendPag.length+")":""),              tasksPendPag.length>0],
           ["historico",  "✅ Histórico ("+(motsPago.length+tasksPagas.length)+")", false],
-          ["acareacao",  `⚠ Acareações${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0?` (${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length})`:""}`,  (tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0],
+          ["acareacao",  "⚠ Acareações"+(((tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length)>0?" ("+(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length+")":""),  (tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0],
         ].map(([v,l,hasPend])=>(
           <button key={v} onClick={()=>setTab(v)}
             className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all relative "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500")+""}>
