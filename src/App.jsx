@@ -242,7 +242,7 @@ const __STORE__ = {};
 const __LOADED__ = {}; // tracks which keys have been loaded from Supabase
 
 function useLS(key, init) {
-  const k = `ops3_${key}`;
+  const k = "ops3_"+(key)+"";
 
   // Initialize store entry once from localStorage
   if (__STORE__[k] === undefined) {
@@ -295,11 +295,11 @@ function useLS(key, init) {
 // SHARED UI
 // ─────────────────────────────────────────────
 const Badge = ({ color, children }) => (
-  <span style={{ color, background: color+"18", border:`1px solid ${color}30` }}
+  <span style={{ color, background: color+"18", border:"1px solid "+(color)+"30" }}
     className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{children}</span>
 );
 const Card = ({ children, className="" }) => (
-  <div className={`bg-slate-800 border border-slate-700 rounded-xl ${className}`}>{children}</div>
+  <div className={"bg-slate-800 border border-slate-700 rounded-xl "+(className)+""}>{children}</div>
 );
 const Btn = ({ onClick, children, variant="primary", size="md", className="", disabled=false, type="button" }) => {
   const base = "inline-flex items-center gap-1.5 font-semibold rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
@@ -313,7 +313,7 @@ const Btn = ({ onClick, children, variant="primary", size="md", className="", di
     blue:     "bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30",
     warning:  "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30",
   };
-  return <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${sizes[size]} ${vars[variant]} ${className}`}>{children}</button>;
+  return <button type={type} onClick={onClick} disabled={disabled} className={""+(base)+" "+(sizes[size])+" "+(vars[variant])+" "+(className)+""}>{children}</button>;
 };
 const Input = ({ label, ...p }) => (
   <div className="flex flex-col gap-1">
@@ -335,7 +335,7 @@ const TA = ({ label, ...p }) => (
 );
 const Modal = ({ title, onClose, children, wide=false }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} className={`bg-slate-800 border border-slate-700 rounded-2xl w-full ${wide?"max-w-3xl":"max-w-lg"} max-h-[90vh] overflow-y-auto`}>
+    <div onClick={e=>e.stopPropagation()} className={"bg-slate-800 border border-slate-700 rounded-2xl w-full "+(wide?"max-w-3xl":"max-w-lg")+" max-h-[90vh] overflow-y-auto"}>
       <div className="flex items-center justify-between p-5 border-b border-slate-700">
         <h2 className="text-base font-bold text-slate-100">{title}</h2>
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400"><X size={16}/></button>
@@ -348,16 +348,16 @@ const KpiCard = ({ label, value, sub, icon:Icon, color="#DC1426", compact }) => 
   <Card className={compact ? "p-3" : "p-5"}>
     <div className="flex items-center justify-between gap-2">
       <div className="flex-1 min-w-0">
-        <p className={`text-slate-400 font-medium uppercase tracking-wider ${compact?"text-xs mb-0.5":"text-xs mb-1"}`}>{label}</p>
-        <p className={`font-bold text-slate-100 leading-tight ${compact?"text-lg":"text-3xl"}`}>{value}</p>
+        <p className={"text-slate-400 font-medium uppercase tracking-wider "+(compact?"text-xs mb-0.5":"text-xs mb-1")+""}>{label}</p>
+        <p className={"font-bold text-slate-100 leading-tight "+(compact?"text-lg":"text-3xl")+""}>{value}</p>
         {sub && <p className={compact?"text-xs mt-0.5":"text-xs mt-1.5"} style={{color}}>{sub}</p>}
       </div>
-      <div className={`flex-shrink-0 rounded-xl flex items-center justify-center shadow ${compact?"w-8 h-8 rounded-lg":"w-12 h-12 rounded-2xl"}`}
-        style={{background:`linear-gradient(135deg, ${color}30 0%, ${color}15 100%)`, border:`1px solid ${color}35`}}>
+      <div className={"flex-shrink-0 rounded-xl flex items-center justify-center shadow "+(compact?"w-8 h-8 rounded-lg":"w-12 h-12 rounded-2xl")+""}
+        style={{background:"linear-gradient(135deg, "+(color)+"30 0%, "+(color)+"15 100%)", border:"1px solid "+(color)+"35"}}>
         <Icon size={compact?16:24} style={{color}}/>
       </div>
     </div>
-    <div className={compact?"mt-2 h-0.5 rounded-full":"mt-4 h-0.5 rounded-full"} style={{background:`linear-gradient(90deg, ${color}60, transparent)`}}/>
+    <div className={compact?"mt-2 h-0.5 rounded-full":"mt-4 h-0.5 rounded-full"} style={{background:"linear-gradient(90deg, "+(color)+"60, transparent)"}}/>
   </Card>
 );
 
@@ -444,12 +444,8 @@ function LoginScreen({ users, onLogin, children }) {
 const NAV = [
   { id:"dashboard",     label:"Dashboard",      icon:LayoutDashboard, roles:["director","area_manager","operator","auditor"], financial:false },
   { id:"tasks",         label:"Tarefas",         icon:ClipboardList,   roles:["director","area_manager","operator","auditor"], financial:false },
-  { id:"costs",         label:"Custos",          icon:DollarSign,      roles:["director","area_manager","auditor"],             financial:true },
-  { id:"revenue",       label:"Faturamento",     icon:Wallet,          roles:["director","area_manager","auditor"],             financial:true },
-  { id:"profitability", label:"Rentabilidade",   icon:TrendingUp,      roles:["director","area_manager","auditor"],             financial:true },
-  { id:"forecast",      label:"Forecast",        icon:BarChart2,       roles:["director","area_manager","auditor"],             financial:true },
+  { id:"atendimento",   label:"Atendimento",     icon:MessageSquare,   roles:["director","area_manager","operator","auditor"],  financial:false },
   { id:"fechamento",    label:"Fechamento",      icon:Truck,           roles:["director","area_manager","operator","auditor"],  financial:false, fechamento:true },
-  { id:"fatjadlog",     label:"Fat. Jadlog",     icon:BarChart2,       roles:["director","area_manager","auditor"],              financial:true  },
   { id:"mob",           label:"Mão de Obra",     icon:Users,           roles:["director","area_manager","auditor"],              financial:false },
   { id:"pagamentos",    label:"Pagamentos",      icon:CreditCard,      roles:["director","area_manager","auditor"],              financial:true  },
   { id:"admin",         label:"Administração",   icon:Settings,        roles:["director"],                                       financial:false },
@@ -481,16 +477,16 @@ function Sidebar({ user, view, setView, onLogout, areas, setUsers, users, tasks 
       });
     });
     const siteUrl = window.location.href.split("#")[0];
-    const msg = encodeURIComponent(`🚨 AÇÃO URGENTE NECESSÁRIA no sistema Grupo All Logística!\n\nHá tarefas aguardando sua ação. Acesse agora:\n${siteUrl}\n\nEquipe Grupo All`);
+    const msg = encodeURIComponent("🚨 AÇÃO URGENTE NECESSÁRIA no sistema Grupo All Logística!\n\nHá tarefas aguardando sua ação. Acesse agora:\n"+(siteUrl)+"\n\nEquipe Grupo All");
     let sent = 0;
     users.filter(u => u.phone && u.role !== "auditor" && u.id !== user.id).forEach(u => {
       const phone = u.phone.replace(/\D/g,"");
       const fullPhone = phone.startsWith("55") ? phone : "55" + phone;
-      window.open(`https://wa.me/${fullPhone}?text=${msg}`, "_blank");
+      window.open("https://wa.me/"+(fullPhone)+"?text="+(msg)+"", "_blank");
       sent++;
     });
     if (sent === 0) alert("Nenhum usuário com WhatsApp cadastrado. Adicione o telefone dos usuários em Administração → Usuários.");
-    else alert(`✅ WhatsApp aberto para ${sent} usuário(s). Confirme o envio em cada aba.`);
+    else alert("✅ WhatsApp aberto para "+(sent)+" usuário(s). Confirme o envio em cada aba.");
   };
 
   return (
@@ -531,7 +527,7 @@ function Sidebar({ user, view, setView, onLogout, areas, setUsers, users, tasks 
         {NAV.filter(n=>n.roles.includes(user.role) && (!n.financial || hasF) && (!n.fechamento || userHasFechamento(user))).map(n=>{
           const Icon=n.icon; const active=view===n.id;
           return (
-            <button key={n.id} onClick={()=>setView(n.id)} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all w-full text-left ${active?"bg-amber-500/10 text-amber-400 border border-amber-500/20":"text-slate-400 hover:text-slate-100 hover:bg-slate-800"}`}>
+            <button key={n.id} onClick={()=>setView(n.id)} className={"flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all w-full text-left "+(active?"bg-amber-500/10 text-amber-400 border border-amber-500/20":"text-slate-400 hover:text-slate-100 hover:bg-slate-800")+""}>
               <Icon size={16}/>{n.label}
             </button>
           );
@@ -577,7 +573,7 @@ function TaskTrackingDashboard({ user, tasks, templates, clients, areas, setView
     const isTerminal = ["completed","rejected","cancelled"].includes(task.status);
     return (
       <div onClick={()=>{ setView("tasks"); onOpenTask(task.id); }} style={{cursor:"pointer"}}
-        className={`bg-slate-800 border rounded-xl p-5 hover:border-red-500/40 group transition-all ${task.status==="awaiting_approval"?"border-amber-500/30":"border-slate-700"}`}>
+        className={"bg-slate-800 border rounded-xl p-5 hover:border-red-500/40 group transition-all "+(task.status==="awaiting_approval"?"border-amber-500/30":"border-slate-700")+""}>
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -593,7 +589,7 @@ function TaskTrackingDashboard({ user, tasks, templates, clients, areas, setView
         <div className="overflow-hidden">
           <div className="relative px-4">
             <div className="absolute left-8 right-8 top-4 h-0.5 bg-slate-700" style={{zIndex:0}}>
-              <div className="h-full bg-slate-500 transition-all" style={{width:`${(task.stepStatuses.filter(s=>s.status==="completed").length/Math.max(tpl.steps.length-1,1))*100}%`}}/>
+              <div className="h-full bg-slate-500 transition-all" style={{width:""+((task.stepStatuses.filter(s=>s.status==="completed").length/Math.max(tpl.steps.length-1,1))*100)+"%"}}/>
             </div>
             <div className="relative flex items-start justify-between" style={{zIndex:1}}>
             {tpl.steps.map((step,i)=>{
@@ -606,10 +602,10 @@ function TaskTrackingDashboard({ user, tasks, templates, clients, areas, setView
               return (
                 <div key={step.id} className="flex flex-col items-center gap-1.5" style={{flex:1}}>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all text-xs font-bold"
-                    style={{background:bg,borderColor:border,color:isCur?"#0f172a":"#fff",boxShadow:isCur?`0 0 0 3px ${bg}30`:"none"}}>
+                    style={{background:bg,borderColor:border,color:isCur?"#0f172a":"#fff",boxShadow:isCur?"0 0 0 3px "+(bg)+"30":"none"}}>
                     {st==="completed"?<Check size={12}/>:st==="rejected"?<X size={12}/>:i+1}
                   </div>
-                  <p className={`text-xs font-medium text-center leading-tight px-1 ${isCur?"text-amber-400":st==="completed"?"text-emerald-400":"text-slate-500"}`}>{step.name}</p>
+                  <p className={"text-xs font-medium text-center leading-tight px-1 "+(isCur?"text-amber-400":st==="completed"?"text-emerald-400":"text-slate-500")+""}>{step.name}</p>
                   {step.slaDays&&<p className="text-xs text-blue-400/60">⏱{step.slaDays}d</p>}
                   {ss?.slaOverdue&&!isCur&&ss.status==="pending"&&<p className="text-xs text-red-400 font-bold">⚠ SLA</p>}
                   {isCur&&ss?.slaOverdue&&<p className="text-xs text-red-400 animate-pulse font-bold">⚠ SLA</p>}
@@ -629,7 +625,7 @@ function TaskTrackingDashboard({ user, tasks, templates, clients, areas, setView
                   if (!ss?.startedAt) return <span className="text-blue-400 ml-2">⏱ SLA: {slaDias}d úteis</span>;
                   // Recalc dias uteis passed
                   const FERIADOS = new Set(["01/01","21/04","01/05","07/09","12/10","02/11","15/11","25/12"]);
-                  const isFer = d => { const s=`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`; return FERIADOS.has(s); };
+                  const isFer = d => { const s=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); return FERIADOS.has(s); };
                   const cur2 = new Date(ss.startedAt); cur2.setDate(cur2.getDate()+1); cur2.setHours(0,0,0,0);
                   const end2 = new Date(); end2.setHours(0,0,0,0);
                   let passed = 0;
@@ -718,8 +714,8 @@ function FinancialDashboard({ tasks, fixedCosts, costEntries, revenues, clients,
         <p className="text-sm text-slate-400">{MONTHS_SHORT[curMonth-1]} {curYear}</p></div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Comissão Total" value={fmt(totalRev)} sub="mês corrente" icon={Wallet} color="#10b981"/>
-        <KpiCard label="Custo Total" value={fmt(totalCost)} sub={`fixo: ${fmt(totalFixed)}`} icon={DollarSign} color="#ef4444"/>
-        <KpiCard label="Margem" value={`${margin.toFixed(1)}%`} sub={fmt(totalRev-totalCost)} icon={TrendingUp} color={margin>20?"#10b981":"#f59e0b"}/>
+        <KpiCard label="Custo Total" value={fmt(totalCost)} sub={"fixo: "+(fmt(totalFixed))+""} icon={DollarSign} color="#ef4444"/>
+        <KpiCard label="Margem" value={""+(margin.toFixed(1))+"%"} sub={fmt(totalRev-totalCost)} icon={TrendingUp} color={margin>20?"#10b981":"#f59e0b"}/>
         <KpiCard label="Tarefas Pendentes" value={pending} sub="aguardando aprovação" icon={ClipboardList} color="#60a5fa"/>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -744,7 +740,7 @@ function FinancialDashboard({ tasks, fixedCosts, costEntries, revenues, clients,
             <BarChart data={byClient} barSize={18}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
               <XAxis dataKey="name" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}}/>
-              <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
+              <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={v=>""+((v/1000).toFixed(0))+"k"}/>
               <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8}} formatter={v=>fmt(v)}/>
               <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
               <Bar dataKey="revenue" name="Receita" fill="#10b981" radius={[4,4,0,0]}/>
@@ -964,7 +960,7 @@ function TaskFormModal({ user, templates, clients, existing, onClose, onSave }) 
             <div className="flex items-center gap-1 flex-wrap">
               {tpl.steps.map((s,i)=>(
                 <div key={s.id} className="flex items-center gap-1">
-                  <span className={`text-xs px-2 py-1 rounded ${s.requiresApproval?"bg-amber-500/10 text-amber-400 border border-amber-500/20":"bg-slate-700 text-slate-300"}`}>{s.name}</span>
+                  <span className={"text-xs px-2 py-1 rounded "+(s.requiresApproval?"bg-amber-500/10 text-amber-400 border border-amber-500/20":"bg-slate-700 text-slate-300")+""}>{s.name}</span>
                   {i<tpl.steps.length-1&&<ChevronRight size={10} className="text-slate-600"/>}
                 </div>
               ))}
@@ -1155,7 +1151,7 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
       )}
       <div className="flex gap-2 flex-wrap">
         {[["all","Todas"],["mine","Minhas"],["pending","Aguard. Aprovação"],["in_progress","Em Andamento"],["completed","Concluídas"]].map(([v,l])=>(
-          <button key={v} onClick={()=>setFilter(v)} className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all border ${filter===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}>{l}</button>
+          <button key={v} onClick={()=>setFilter(v)} className={"text-xs px-3 py-1.5 rounded-full font-medium transition-all border "+(filter===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500")+""}>{l}</button>
         ))}
       </div>
       <div className="space-y-3">
@@ -1168,7 +1164,7 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
           const needsAction=t.status==="awaiting_approval";
           return (
             <div key={t.id} onClick={()=>setSelectedId(t.id)} style={{cursor:"pointer"}}
-              className={`bg-slate-800 border rounded-xl p-4 hover:border-red-500/40 group transition-all ${needsAction?"border-amber-500/30":"border-slate-700"}`}>
+              className={"bg-slate-800 border rounded-xl p-4 hover:border-red-500/40 group transition-all "+(needsAction?"border-amber-500/30":"border-slate-700")+""}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1201,7 +1197,7 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
                   </div>
                   <span className="text-xs text-slate-400">{done}/{total} etapas</span>
                   <div className="w-24 bg-slate-700 rounded-full h-1.5">
-                    <div className="bg-red-500 h-1.5 rounded-full" style={{width:`${(done/total)*100}%`}}/>
+                    <div className="bg-red-500 h-1.5 rounded-full" style={{width:""+((done/total)*100)+"%"}}/>
                   </div>
                   {t.costRationals.length>0&&<span className="text-xs text-amber-400/70">{fmt(t.costRationals.reduce((s,c)=>s+c.value,0))}</span>}
                 </div>
@@ -1264,8 +1260,8 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
         ["director","area_manager","operator"].includes(u.role)
       );
       notifyUsers(toNotify,
-        `[Grupo All] Tarefa: ${task.title} — Etapa ${next+1}: ${ns.name}`,
-        `A tarefa "${task.title}" avançou para a etapa "${ns.name}".\n\nAcesse o sistema para tomar ação: ${window.location.href}`
+        "[Grupo All] Tarefa: "+(task.title)+" — Etapa "+(next+1)+": "+(ns.name)+"",
+        "A tarefa ""+(task.title)+"" avançou para a etapa ""+(ns.name)+"".\n\nAcesse o sistema para tomar ação: "+(window.location.href)+""
       );
     } catch(e) {}
   };
@@ -1298,7 +1294,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     if (!tpl) return;
     const siteUrl = window.location.origin || window.location.href.split("#")[0];
     const msg = encodeURIComponent(
-      `🚨 URGENTE — Tarefa ${taskCode}\n\n"${task.title}"\n\nSua ação é necessária agora!\n\nAcesse: ${siteUrl}\n\nGrupo All Logística`
+      "🚨 URGENTE — Tarefa "+(taskCode)+"\n\n""+(task.title)+""\n\nSua ação é necessária agora!\n\nAcesse: "+(siteUrl)+"\n\nGrupo All Logística"
     );
     // Find who should be notified: assignee of current step OR area users OR all non-auditors
     const currentStep_ = tpl.steps[task.currentStepIndex];
@@ -1318,7 +1314,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     withPhone.forEach(u => {
       const phone = u.phone.replace(/\D/g,"");
       const full = phone.startsWith("55") ? phone : "55"+phone;
-      window.open(`https://wa.me/${full}?text=${msg}`, "_blank");
+      window.open("https://wa.me/"+(full)+"?text="+(msg)+"", "_blank");
     });
   };
 
@@ -1364,9 +1360,9 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
 
       {/* Action panel */}
       {!isTerminal&&(
-        <div className={`rounded-xl border-2 p-5 space-y-4 ${hasAction?"border-amber-500/40 bg-amber-500/5":"border-slate-700 bg-slate-800"}`}>
+        <div className={"rounded-xl border-2 p-5 space-y-4 "+(hasAction?"border-amber-500/40 bg-amber-500/5":"border-slate-700 bg-slate-800")+""}>
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${hasAction?"bg-amber-400 animate-pulse":"bg-slate-600"}`}/>
+            <div className={"w-2 h-2 rounded-full "+(hasAction?"bg-amber-400 animate-pulse":"bg-slate-600")+""}/>
             <h3 className="text-sm font-bold text-slate-200">{hasAction?"Ação necessária":"Aguardando ação de outro usuário"}</h3>
           </div>
           {currentStep&&(
@@ -1410,7 +1406,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
               {!hasAction&&!showApproval&&(
                 <p className="text-xs text-slate-500 text-center py-2">
                   {task.status==="awaiting_approval"
-                    ?`Aguardando ${currentStep?.approverRole==="director"?"o Diretor":`Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
+                    ?"Aguardando ${currentStep?.approverRole==="director"?"o Diretor":"Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
                     :"Nenhuma ação disponível para o seu perfil nesta etapa."}
                 </p>
               )}
@@ -1420,10 +1416,10 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
         </div>
       )}
       {isTerminal&&(
-        <div className={`rounded-xl border p-4 flex items-center gap-3 ${task.status==="completed"?"border-emerald-500/30 bg-emerald-500/5":"border-red-500/30 bg-red-500/5"}`}>
+        <div className={"rounded-xl border p-4 flex items-center gap-3 "+(task.status==="completed"?"border-emerald-500/30 bg-emerald-500/5":"border-red-500/30 bg-red-500/5")+""}>
           {task.status==="completed"?<CheckCircle2 size={18} className="text-emerald-400"/>:<XCircle size={18} className="text-red-400"/>}
-          <p className={`text-sm font-semibold ${task.status==="completed"?"text-emerald-300":"text-red-300"}`}>
-            {task.status==="completed"?"Tarefa concluída com sucesso.":`Tarefa ${STATUS_LABELS[task.status].toLowerCase()}.`}
+          <p className={"text-sm font-semibold "+(task.status==="completed"?"text-emerald-300":"text-red-300")+""}>
+            {task.status==="completed"?"Tarefa concluída com sucesso.":"Tarefa "+(STATUS_LABELS[task.status].toLowerCase())+"."}
           </p>
         </div>
       )}
@@ -1439,13 +1435,13 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
             const isCur=i===task.currentStepIndex&&!isTerminal;
             const done=ss?.status==="completed"; const rej=ss?.status==="rejected";
             return (
-              <div key={step.id} className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${done?"bg-emerald-500/5 border-emerald-500/20":rej?"bg-red-500/5 border-red-500/20":isCur?"bg-amber-500/5 border-amber-500/30":"bg-slate-900 border-slate-700 opacity-60"}`}>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5 ${done?"bg-emerald-500 text-white":rej?"bg-red-500 text-white":isCur?"bg-amber-500 text-slate-900":"bg-slate-700 text-slate-500"}`}>
+              <div key={step.id} className={"flex items-start gap-3 p-3 rounded-lg border transition-all "+(done?"bg-emerald-500/5 border-emerald-500/20":rej?"bg-red-500/5 border-red-500/20":isCur?"bg-amber-500/5 border-amber-500/30":"bg-slate-900 border-slate-700 opacity-60")+""}>
+                <div className={"w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5 "+(done?"bg-emerald-500 text-white":rej?"bg-red-500 text-white":isCur?"bg-amber-500 text-slate-900":"bg-slate-700 text-slate-500")+""}>
                   {done?<Check size={12}/>:rej?<X size={12}/>:i+1}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className={`text-sm font-semibold ${isCur?"text-amber-300":done?"text-emerald-300":"text-slate-300"}`}>{step.name}</p>
+                    <p className={"text-sm font-semibold "+(isCur?"text-amber-300":done?"text-emerald-300":"text-slate-300")+""}>{step.name}</p>
                     {area&&<Badge color="#60a5fa">{area.name}</Badge>}
                     {step.requiresApproval&&<Badge color="#f59e0b">Aprovação</Badge>}
                     {isCur&&<span className="text-xs text-amber-400 font-semibold">← atual</span>}
@@ -1466,7 +1462,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
           <div className="space-y-2">
             {task.clientAllocation.length>0&&(
               <div className="bg-slate-900 rounded-lg p-2 border border-slate-700 mb-2">
-                <p className="text-xs text-slate-500">Rateado para: {task.clientAllocation.map(a=>`${clients.find(c=>c.id===a.clientId)?.name} (${a.percent}%)`).join(" · ")}</p>
+                <p className="text-xs text-slate-500">Rateado para: {task.clientAllocation.map(a=>""+(clients.find(c=>c.id===a.clientId)?.name)+" ("+(a.percent)+"%)").join(" · ")}</p>
               </div>
             )}
             {task.costRationals.map(c=>(
@@ -1552,13 +1548,13 @@ function CostsView({ user, fixedCosts, setFixedCosts, costEntries, setCostEntrie
         </div>}
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <KpiCard label="Custos Fixos/Mês" value={fmt(totalFixed)} sub={`${fixedCosts.filter(f=>f.active).length} itens ativos`} icon={Lock} color="#ef4444"/>
-        <KpiCard label="Custos Variáveis" value={fmt(totalVar)} sub={`${MONTHS_SHORT[filterMonth-1]} · ${filtered.length} lançamentos`} icon={Activity} color="#f59e0b"/>
+        <KpiCard label="Custos Fixos/Mês" value={fmt(totalFixed)} sub={""+(fixedCosts.filter(f=>f.active).length)+" itens ativos"} icon={Lock} color="#ef4444"/>
+        <KpiCard label="Custos Variáveis" value={fmt(totalVar)} sub={""+(MONTHS_SHORT[filterMonth-1])+" · "+(filtered.length)+" lançamentos"} icon={Activity} color="#f59e0b"/>
       </div>
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex gap-1">
           {[["variable","Variáveis"],["fixed","Fixos"]].map(([v,l])=>(
-            <button key={v} onClick={()=>setTab(v)} className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+            <button key={v} onClick={()=>setTab(v)} className={"text-xs px-3 py-1.5 rounded-full font-medium border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")+""}>{l}</button>
           ))}
         </div>
         {tab==="variable"&&<Sel value={filterMonth} onChange={e=>setFilterMonth(Number(e.target.value))}>
@@ -1569,7 +1565,7 @@ function CostsView({ user, fixedCosts, setFixedCosts, costEntries, setCostEntrie
         <div className="space-y-2">
           {filtered.length===0&&<div className="text-center py-10 text-slate-500 text-sm">Nenhum lançamento neste mês</div>}
           {filtered.map(c=>{
-            const alloc=c.clientAllocation.map(a=>`${clients.find(cl=>cl.id===a.clientId)?.code} ${a.percent}%`).join(" · ");
+            const alloc=c.clientAllocation.map(a=>""+(clients.find(cl=>cl.id===a.clientId)?.code)+" "+(a.percent)+"%").join(" · ");
             return (
               <Card key={c.id} className="p-4">
                 <div className="flex items-center justify-between">
@@ -1589,9 +1585,9 @@ function CostsView({ user, fixedCosts, setFixedCosts, costEntries, setCostEntrie
       {tab==="fixed"&&(
         <div className="space-y-2">
           {fixedCosts.map(fc=>{
-            const alloc=fc.clientAllocation.map(a=>`${clients.find(cl=>cl.id===a.clientId)?.code} ${a.percent}%`).join(" · ");
+            const alloc=fc.clientAllocation.map(a=>""+(clients.find(cl=>cl.id===a.clientId)?.code)+" "+(a.percent)+"%").join(" · ");
             return (
-              <Card key={fc.id} className={`p-4 ${!fc.active?"opacity-50":""}`}>
+              <Card key={fc.id} className={"p-4 "+(!fc.active?"opacity-50":"")+""}>
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2"><p className="text-sm font-semibold text-slate-100">{fc.description}</p><Badge color={fc.active?"#10b981":"#64748b"}>{fc.active?"Ativo":"Inativo"}</Badge></div>
@@ -1599,7 +1595,7 @@ function CostsView({ user, fixedCosts, setFixedCosts, costEntries, setCostEntrie
                   </div>
                   <div className="flex items-center gap-3">
                     <p className="font-bold text-red-400">{fmt(fc.value)}</p>
-                    {canEdit&&<button onClick={()=>toggleFixed(fc.id)} className={`text-xs px-2 py-1 rounded border ${fc.active?"border-red-500/30 text-red-400":"border-emerald-500/30 text-emerald-400"}`}>{fc.active?"Desativar":"Ativar"}</button>}
+                    {canEdit&&<button onClick={()=>toggleFixed(fc.id)} className={"text-xs px-2 py-1 rounded border "+(fc.active?"border-red-500/30 text-red-400":"border-emerald-500/30 text-emerald-400")+""}>{fc.active?"Desativar":"Ativar"}</button>}
                   </div>
                 </div>
               </Card>
@@ -1710,7 +1706,7 @@ function RevenueView({ user, acrescimos, setAcrescimos, clients, faturamentosJad
       <div className="flex gap-2">
         {[["jadlog","📊 Fat. Jadlog"],["acrescimos","➕ Acréscimos Avulsos"]].map(([v,l])=>(
           <button key={v} onClick={()=>setTab(v)}
-            className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+            className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")+""}>{l}</button>
         ))}
       </div>
 
@@ -1721,7 +1717,7 @@ function RevenueView({ user, acrescimos, setAcrescimos, clients, faturamentosJad
           {Object.entries(jadlogByClient).sort((a,b)=>b[1].total-a[1].total).map(([k,c])=>(
             <Card key={k} className="p-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${c.matched?"bg-emerald-400":"bg-amber-400"}`}/>
+                <div className={"w-2 h-2 rounded-full "+(c.matched?"bg-emerald-400":"bg-amber-400")+""}/>
                 <div>
                   <p className="font-semibold text-slate-100">{c.nome}</p>
                   <p className="text-xs text-slate-500">{c.ctes.toLocaleString()} CTEs{!c.matched?" · sem cadastro":""}</p>
@@ -1850,11 +1846,11 @@ function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, 
           {/* Revenue source toggle */}
           <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
             <button onClick={()=>setRevenueSource("jadlog")}
-              className={`px-3 py-1.5 font-semibold transition-all ${revenueSource==="jadlog"?"bg-emerald-600 text-white":"bg-slate-800 text-slate-400"}`}>
+              className={"px-3 py-1.5 font-semibold transition-all "+(revenueSource==="jadlog"?"bg-emerald-600 text-white":"bg-slate-800 text-slate-400")+""}>
               Fat. Jadlog
             </button>
             <button onClick={()=>setRevenueSource("manual")}
-              className={`px-3 py-1.5 font-semibold transition-all ${revenueSource==="manual"?"bg-emerald-600 text-white":"bg-slate-800 text-slate-400"}`}>
+              className={"px-3 py-1.5 font-semibold transition-all "+(revenueSource==="manual"?"bg-emerald-600 text-white":"bg-slate-800 text-slate-400")+""}>
               Manual
             </button>
           </div>
@@ -1876,7 +1872,7 @@ function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, 
       <div className="grid grid-cols-3 gap-4">
         <KpiCard label="Comissão / Receita" value={fmt(totals.rev)} icon={Wallet} color="#10b981"/>
         <KpiCard label="Custo Total" value={fmt(totals.cost)} icon={DollarSign} color="#ef4444"/>
-        <KpiCard label="Lucro / Margem" value={`${totalMargin.toFixed(1)}%`} sub={fmt(totals.profit)} icon={TrendingUp} color={totalMargin>20?"#10b981":"#f59e0b"}/>
+        <KpiCard label="Lucro / Margem" value={""+(totalMargin.toFixed(1))+"%"} sub={fmt(totals.profit)} icon={TrendingUp} color={totalMargin>20?"#10b981":"#f59e0b"}/>
       </div>
       <Card className="p-5">
         <h3 className="text-sm font-bold text-slate-300 mb-4">Receita vs Custo — {MONTHS_SHORT[filterMonth-1]}</h3>
@@ -1884,7 +1880,7 @@ function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, 
           <BarChart data={data.map(d=>({name:d.code,Receita:d.rev,Custo:d.totalCost,Lucro:d.profit}))} barSize={20}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
             <XAxis dataKey="name" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:12}}/>
-            <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
+            <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={v=>""+((v/1000).toFixed(0))+"k"}/>
             <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8}} formatter={v=>fmt(v)}/>
             <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
             <Bar dataKey="Receita" fill="#10b981" radius={[4,4,0,0]}/>
@@ -1910,11 +1906,11 @@ function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, 
                   <td className="px-4 py-3.5 text-orange-400">{fmt(d.vc)}</td>
                   <td className="px-4 py-3.5 text-amber-400">{fmt(d.tc)}</td>
                   <td className="px-4 py-3.5 text-red-400 font-semibold">{fmt(d.totalCost)}</td>
-                  <td className={`px-4 py-3.5 font-bold ${d.profit>=0?"text-emerald-400":"text-red-400"}`}>{fmt(d.profit)}</td>
+                  <td className={"px-4 py-3.5 font-bold "+(d.profit>=0?"text-emerald-400":"text-red-400")+""}>{fmt(d.profit)}</td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2">
-                      <div className="w-14 bg-slate-700 rounded-full h-1.5"><div className="h-1.5 rounded-full" style={{width:`${Math.max(0,Math.min(100,d.margin))}%`,background:d.margin>20?"#10b981":d.margin>0?"#f59e0b":"#ef4444"}}/></div>
-                      <span className={`text-xs font-bold ${d.margin>20?"text-emerald-400":d.margin>0?"text-amber-400":"text-red-400"}`}>{d.margin.toFixed(1)}%</span>
+                      <div className="w-14 bg-slate-700 rounded-full h-1.5"><div className="h-1.5 rounded-full" style={{width:""+(Math.max(0,Math.min(100,d.margin)))+"%",background:d.margin>20?"#10b981":d.margin>0?"#f59e0b":"#ef4444"}}/></div>
+                      <span className={"text-xs font-bold "+(d.margin>20?"text-emerald-400":d.margin>0?"text-amber-400":"text-red-400")+""}>{d.margin.toFixed(1)}%</span>
                     </div>
                   </td>
                 </tr>
@@ -1925,7 +1921,7 @@ function ProfitabilityView({ clients, fixedCosts, costEntries, revenues, tasks, 
               <td className="px-4 py-3 text-emerald-400 font-bold">{fmt(totals.rev)}</td>
               <td colSpan={3} className="px-4 py-3"/>
               <td className="px-4 py-3 text-red-400 font-bold">{fmt(totals.cost)}</td>
-              <td className={`px-4 py-3 font-bold text-lg ${totals.profit>=0?"text-emerald-400":"text-red-400"}`}>{fmt(totals.profit)}</td>
+              <td className={"px-4 py-3 font-bold text-lg "+(totals.profit>=0?"text-emerald-400":"text-red-400")+""}>{fmt(totals.profit)}</td>
               <td className="px-4 py-3 font-bold text-amber-400">{totalMargin.toFixed(1)}%</td>
             </tr></tfoot>
           </table>
@@ -1991,7 +1987,7 @@ function TemplateBuilder({ areas, users, initial, onSave, onCancel, proposedBy }
           <div className="flex gap-2 flex-wrap">
             {areas.map(a=>(
               <button key={a.id} type="button" onClick={()=>toggleArea(a.id)}
-                className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all ${form.areaIds.includes(a.id)?"bg-blue-500/20 text-blue-300 border-blue-500/40":"bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500"}`}>
+                className={"text-xs px-3 py-1.5 rounded-full font-medium border transition-all "+(form.areaIds.includes(a.id)?"bg-blue-500/20 text-blue-300 border-blue-500/40":"bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500")+""}>
                 {form.areaIds.includes(a.id)&&<Check size={11} className="inline mr-1"/>}{a.name}
               </button>
             ))}
@@ -2103,15 +2099,15 @@ function TemplateBuilder({ areas, users, initial, onSave, onCancel, proposedBy }
             <div className="mb-3">
               <TA label="Instrução" placeholder="O que deve ser feito nesta etapa?" rows={2} value={step.description} onChange={e=>updStep(step.id,"description",e.target.value)}/>
             </div>
-            <div className={`rounded-lg border p-3 transition-all ${step.requiresApproval?"bg-amber-500/5 border-amber-500/20":"bg-slate-900 border-slate-700"}`}>
+            <div className={"rounded-lg border p-3 transition-all "+(step.requiresApproval?"bg-amber-500/5 border-amber-500/20":"bg-slate-900 border-slate-700")+""}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className={`text-sm font-semibold ${step.requiresApproval?"text-amber-300":"text-slate-300"}`}>Requer aprovação</p>
+                  <p className={"text-sm font-semibold "+(step.requiresApproval?"text-amber-300":"text-slate-300")+""}>Requer aprovação</p>
                   <p className="text-xs text-slate-500 mt-0.5">Tarefa pausa aguardando aprovação</p>
                 </div>
                 <button type="button" onClick={()=>updStep(step.id,"requiresApproval",!step.requiresApproval)}
-                  className={`w-11 h-6 rounded-full transition-all flex items-center px-1 ${step.requiresApproval?"bg-amber-500":"bg-slate-700"}`}>
-                  <span className={`w-4 h-4 rounded-full bg-white transition-all ${step.requiresApproval?"translate-x-5":"translate-x-0"}`}/>
+                  className={"w-11 h-6 rounded-full transition-all flex items-center px-1 "+(step.requiresApproval?"bg-amber-500":"bg-slate-700")+""}>
+                  <span className={"w-4 h-4 rounded-full bg-white transition-all "+(step.requiresApproval?"translate-x-5":"translate-x-0")+""}/>
                 </button>
               </div>
               {step.requiresApproval&&(
@@ -2120,7 +2116,7 @@ function TemplateBuilder({ areas, users, initial, onSave, onCancel, proposedBy }
                   <div className="flex gap-2">
                     {[["area_manager","Gestor de Área","#60a5fa"],["director","Diretor","#f59e0b"]].map(([val,label,color])=>(
                       <button key={val} type="button" onClick={()=>updStep(step.id,"approverRole",val)}
-                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all ${step.approverRole===val?"border-2":""}`}
+                        className={"flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all "+(step.approverRole===val?"border-2":"")+""}
                         style={step.approverRole===val?{borderColor:color,color,background:color+"15"}:{borderColor:"#334155",color:"#64748b",background:"#0f172a"}}>
                         {step.approverRole===val&&<Check size={12} className="inline mr-1"/>}{label}
                       </button>
@@ -2144,8 +2140,8 @@ function TemplateBuilder({ areas, users, initial, onSave, onCancel, proposedBy }
               const assignee=users.find(u=>u.id===s.assigneeUserId);
               return (
                 <div key={s.id} className="flex items-center gap-1">
-                  <div className={`rounded-lg px-3 py-2 border text-center min-w-[90px] ${s.requiresApproval?"bg-amber-500/10 border-amber-500/30":"bg-slate-900 border-slate-700"}`}>
-                    <p className={`text-xs font-semibold ${s.requiresApproval?"text-amber-300":"text-slate-200"}`}>{s.name||`Etapa ${i+1}`}</p>
+                  <div className={"rounded-lg px-3 py-2 border text-center min-w-[90px] "+(s.requiresApproval?"bg-amber-500/10 border-amber-500/30":"bg-slate-900 border-slate-700")+""}>
+                    <p className={"text-xs font-semibold "+(s.requiresApproval?"text-amber-300":"text-slate-200")+""}>{s.name||"Etapa "+(i+1)+""}</p>
                     {area&&<p className="text-xs text-slate-500 mt-0.5">{area.name}</p>}
                     {assignee&&<p className="text-xs text-blue-400 mt-0.5">{assignee.name.split(" ")[0]}</p>}
                     {s.slaDays&&<p className="text-xs text-blue-400/70 mt-0.5">⏱ {s.slaDays}d</p>}
@@ -2212,7 +2208,7 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
         <p className="text-sm text-slate-400">Usuários, áreas, clientes e fluxos</p></div>
       <div className="flex gap-2 flex-wrap">
         {[["users","👥 Usuários"],["areas","🏢 Áreas"],["clients","🤝 Clientes"],["templates","📋 Fluxos"]].map(([v,l])=>(
-          <button key={v} onClick={()=>setTab(v)} className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+          <button key={v} onClick={()=>setTab(v)} className={"text-xs px-3 py-1.5 rounded-full font-medium border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")+""}>{l}</button>
         ))}
       </div>
 
@@ -2262,26 +2258,26 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
                       {hasF&&<Badge color="#10b981">💰 Financeiro</Badge>}
                       {userHasFechamento(u)&&<Badge color="#60a5fa">🚚 Fechamento</Badge>}
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{u.email}{userAreas?` · ${userAreas}`:""}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{u.email}{userAreas?" · "+(userAreas)+"":""}</p>
                       {u.phone&&<p className="text-xs text-emerald-400/70 mt-0.5">📱 {u.phone}</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                     {!["director","auditor"].includes(u.role)&&(
                       <button onClick={()=>toggleFinancial(u.id)}
-                        className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all ${hasF?"border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20":"border-slate-600 text-slate-500 hover:border-slate-400"}`}>
+                        className={"text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all "+(hasF?"border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20":"border-slate-600 text-slate-500 hover:border-slate-400")+""}>
                         {hasF?"💰 Revogar $":"💰 Liberar $"}
                       </button>
                     )}
                     {u.role!=="director"&&(
                       <button onClick={()=>toggleFechamento(u.id)}
-                        className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all ${userHasFechamento(u)?"border-blue-500/30 text-blue-400 bg-blue-500/10 hover:bg-blue-500/20":"border-slate-600 text-slate-500 hover:border-slate-400"}`}>
+                        className={"text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all "+(userHasFechamento(u)?"border-blue-500/30 text-blue-400 bg-blue-500/10 hover:bg-blue-500/20":"border-slate-600 text-slate-500 hover:border-slate-400")+""}>
                         {userHasFechamento(u)?"🚚 Revogar Fech.":"🚚 Liberar Fech."}
                       </button>
                     )}
                     {u.role!=="director"&&(
                       <button onClick={()=>toggleDRE(u.id)}
-                        className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all ${userHasDRE(u)?"border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20":"border-slate-600 text-slate-500 hover:border-slate-400"}`}>
+                        className={"text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all "+(userHasDRE(u)?"border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20":"border-slate-600 text-slate-500 hover:border-slate-400")+""}>
                         {userHasDRE(u)?"📊 Revogar DRE":"📊 Liberar DRE"}
                       </button>
                     )}
@@ -2338,7 +2334,7 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
             </Card>
           )}
           {templates.map(t=>(
-            <Card key={t.id} className={`p-5 ${t.status==="pending_approval"?"border-amber-500/30 bg-amber-500/5":""}`}>
+            <Card key={t.id} className={"p-5 "+(t.status==="pending_approval"?"border-amber-500/30 bg-amber-500/5":"")+""}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -2356,8 +2352,8 @@ function AdminView({ areas, setAreas, users, setUsers, clients, setClients, temp
                       const area=areas.find(a=>a.id===s.areaId);
                       return (
                         <div key={s.id} className="flex items-center gap-1">
-                          <span className={`text-xs px-2 py-0.5 rounded border ${s.requiresApproval?"border-amber-500/30 text-amber-400":"border-slate-700 text-slate-400"}`}>
-                            {s.name}{area&&` · ${area.name}`}{s.slaDays&&<span className="text-blue-400/70"> ⏱{s.slaDays}d</span>}
+                          <span className={"text-xs px-2 py-0.5 rounded border "+(s.requiresApproval?"border-amber-500/30 text-amber-400":"border-slate-700 text-slate-400")+""}>
+                            {s.name}{area&&" · "+(area.name)+""}{s.slaDays&&<span className="text-blue-400/70"> ⏱{s.slaDays}d</span>}
                           </span>
                           {i<t.steps.length-1&&<ChevronRight size={10} className="text-slate-600"/>}
                         </div>
@@ -2451,7 +2447,7 @@ function NewUserModal({ areas, onClose, onSave }) {
             <div className="flex gap-2 flex-wrap">
               {areas.map(a=>(
                 <button key={a.id} type="button" onClick={()=>toggleArea(a.id)}
-                  className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all ${f.areaIds.includes(a.id)?"bg-blue-500/20 text-blue-300 border-blue-500/40":"bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500"}`}>
+                  className={"text-xs px-3 py-1.5 rounded-full font-medium border transition-all "+(f.areaIds.includes(a.id)?"bg-blue-500/20 text-blue-300 border-blue-500/40":"bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500")+""}>
                   {f.areaIds.includes(a.id)&&<Check size={11} className="inline mr-1"/>}{a.name}
                 </button>
               ))}
@@ -2462,8 +2458,8 @@ function NewUserModal({ areas, onClose, onSave }) {
           <div className="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-700">
             <div><p className="text-sm font-semibold text-slate-200">Acesso Financeiro</p><p className="text-xs text-slate-500">Libera Custos, Faturamento e Rentabilidade</p></div>
             <button type="button" onClick={()=>sf("financialAccess",!f.financialAccess)}
-              className={`w-11 h-6 rounded-full transition-all flex items-center px-1 ${f.financialAccess?"bg-emerald-500":"bg-slate-700"}`}>
-              <span className={`w-4 h-4 rounded-full bg-white transition-all ${f.financialAccess?"translate-x-5":"translate-x-0"}`}/>
+              className={"w-11 h-6 rounded-full transition-all flex items-center px-1 "+(f.financialAccess?"bg-emerald-500":"bg-slate-700")+""}>
+              <span className={"w-4 h-4 rounded-full bg-white transition-all "+(f.financialAccess?"translate-x-5":"translate-x-0")+""}/>
             </button>
           </div>
         )}
@@ -2530,7 +2526,7 @@ function FcNumField({ label, clientId, month, field, defaultVal, setFE, prefix="
         <input
           type="number" step={step}
           defaultValue={defaultVal ?? ""}
-          key={`${clientId}-${month}-${field}`}
+          key={""+(clientId)+"-"+(month)+"-"+(field)+""}
           onBlur={ev  => fcUpsert(setFE, clientId, month, { [field]: Number(ev.target.value) })}
           className="flex-1 bg-transparent px-2 py-2 text-sm text-slate-100 focus:outline-none min-w-0 w-full"
         />
@@ -2554,7 +2550,7 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
         const fatReal = fcGetFatReal(revenues, cl.id, filterMonth, faturamentosJadlog, clients, acrescimos);
         const isOpen = expanded === cl.id;
         return (
-          <Card key={cl.id} className={`overflow-hidden transition-all ${isOpen ? "border-amber-500/30" : ""}`}>
+          <Card key={cl.id} className={"overflow-hidden transition-all "+(isOpen ? "border-amber-500/30" : "")+""}>
             <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-700/30 transition-all"
               onClick={() => setExpanded(isOpen ? null : cl.id)}>
               <div className="flex items-center gap-3">
@@ -2563,14 +2559,14 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
                   <p className="font-semibold text-slate-100 text-sm">{cl.name}</p>
                   <div className="flex gap-3 mt-0.5 flex-wrap">
                     <span className="text-xs text-slate-400">Prev: <span className="text-amber-400 font-semibold">{fmt(fat)}</span></span>
-                    {fatReal > 0 && <span className="text-xs text-slate-400">Real: <span className={`font-semibold ${fatReal >= fat ? "text-emerald-400" : "text-red-400"}`}>{fmt(fatReal)}</span></span>}
+                    {fatReal > 0 && <span className="text-xs text-slate-400">Real: <span className={"font-semibold "+(fatReal >= fat ? "text-emerald-400" : "text-red-400")+""}>{fmt(fatReal)}</span></span>}
                     {e?.growthRate ? <span className="text-xs text-slate-500">+{e.growthRate}%/mês</span> : null}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {fat > 0 && <Badge color={fatReal >= fat ? "#10b981" : fatReal > 0 ? "#f59e0b" : "#64748b"}>{fatReal > 0 ? (fatReal >= fat ? "✓ Meta" : `${((fatReal/fat)*100).toFixed(0)}%`) : "Sem real."}</Badge>}
-                <ChevronDown size={16} className={`text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}/>
+                {fat > 0 && <Badge color={fatReal >= fat ? "#10b981" : fatReal > 0 ? "#f59e0b" : "#64748b"}>{fatReal > 0 ? (fatReal >= fat ? "✓ Meta" : ""+(((fatReal/fat)*100).toFixed(0))+"%") : "Sem real."}</Badge>}
+                <ChevronDown size={16} className={"text-slate-400 transition-transform "+(isOpen ? "rotate-180" : "")+""}/>
               </div>
             </div>
             {isOpen && (
@@ -2611,7 +2607,7 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
                   {fcCalcCost(e) > 0 && (
                     <div className="mt-2 bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 flex gap-4 flex-wrap">
                       <span className="text-xs text-slate-400">Custo total: <span className="text-red-400 font-bold">{fmt(fcCalcCost(e))}</span></span>
-                      <span className="text-xs text-slate-400">Saldo previsto: <span className={`font-bold ${fcCalcSaldo(e)>=0?"text-emerald-400":"text-red-400"}`}>{fmt(fcCalcSaldo(e))}</span></span>
+                      <span className="text-xs text-slate-400">Saldo previsto: <span className={"font-bold "+(fcCalcSaldo(e)>=0?"text-emerald-400":"text-red-400")+""}>{fmt(fcCalcSaldo(e))}</span></span>
                     </div>
                   )}
                 </div>
@@ -2621,7 +2617,7 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
                     <div className="flex flex-col gap-1">
                       <label className="text-xs text-slate-400">Volumetria Realizada (opcional)</label>
                       <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden focus-within:border-red-500">
-                        <input type="number" defaultValue={e?.volumetriaRealizada ?? ""} key={`${cl.id}-${filterMonth}-volReal`} placeholder="Vazio = usa previsto"
+                        <input type="number" defaultValue={e?.volumetriaRealizada ?? ""} key={""+(cl.id)+"-"+(filterMonth)+"-volReal"} placeholder="Vazio = usa previsto"
                           onBlur={ev => fcUpsert(setForecastEntries, cl.id, filterMonth, { volumetriaRealizada: ev.target.value===""?null:Number(ev.target.value) })}
                           className="flex-1 bg-transparent px-3 py-2 text-sm text-slate-100 focus:outline-none placeholder-slate-600"/>
                         <span className="text-xs text-slate-500 px-2">un</span>
@@ -2646,7 +2642,7 @@ function PrevisaoTab({ clients, revenues, forecastEntries, setForecastEntries, f
                       <input
                         type="number" step="0.5" min="-100" max="100"
                         defaultValue={e?.growthRate??0}
-                        key={`gr-${cl.id}-${filterMonth}`}
+                        key={"gr-"+(cl.id)+"-"+(filterMonth)+""}
                         onBlur={ev => fcUpsert(setForecastEntries, cl.id, filterMonth, { growthRate: Number(ev.target.value) })}
                         className="w-12 bg-transparent text-sm text-amber-400 font-bold text-center focus:outline-none"
                       />
@@ -2690,7 +2686,7 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
     return { cl, e, fat, fatSrc, fatPrev, desvio, vol, volSrc, custos, imposto, saldo };
   });
   const totals = rows.reduce((a,r) => ({ fat:a.fat+r.fat, fatPrev:a.fatPrev+r.fatPrev, custos:a.custos+r.custos, imposto:a.imposto+r.imposto, saldo:a.saldo+r.saldo }), { fat:0, fatPrev:0, custos:0, imposto:0, saldo:0 });
-  const SrcBadge = ({ src }) => <span className={`text-xs ml-1 font-bold ${src==="real"?"text-emerald-400":"text-amber-400/70"}`}>{src==="real"?"R":"P"}</span>;
+  const SrcBadge = ({ src }) => <span className={"text-xs ml-1 font-bold "+(src==="real"?"text-emerald-400":"text-amber-400/70")+""}>{src==="real"?"R":"P"}</span>;
   return (
     <div className="space-y-5">
       <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-2 text-xs text-emerald-300">
@@ -2719,13 +2715,13 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
                   <td className="px-4 py-3 text-emerald-400 font-semibold whitespace-nowrap">{fmt(fat)}<SrcBadge src={fatSrc}/></td>
                   <td className="px-4 py-3 text-amber-400/80 whitespace-nowrap">{fmt(fatPrev)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {desvio!==null ? <span className={`text-xs font-bold px-2 py-0.5 rounded ${desvio>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400"}`}>{desvio>=0?"+":""}{desvio.toFixed(1)}%</span> : <span className="text-slate-600 text-xs">—</span>}
+                    {desvio!==null ? <span className={"text-xs font-bold px-2 py-0.5 rounded "+(desvio>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400")+""}>{desvio>=0?"+":""}{desvio.toFixed(1)}%</span> : <span className="text-slate-600 text-xs">—</span>}
                   </td>
                   <td className="px-4 py-3 text-red-400 whitespace-nowrap">{fmt(custos)}</td>
                   <td className="px-4 py-3 text-purple-400 whitespace-nowrap">{fmt(imposto)}</td>
-                  <td className={`px-4 py-3 font-bold whitespace-nowrap ${saldo>=0?"text-emerald-400":"text-red-400"}`}>{fmt(saldo)}</td>
+                  <td className={"px-4 py-3 font-bold whitespace-nowrap "+(saldo>=0?"text-emerald-400":"text-red-400")+""}>{fmt(saldo)}</td>
                   <td className="px-4 py-3 min-w-[200px]">
-                    <input defaultValue={e?.observacao||""} key={`obs-${cl.id}-${filterMonth}`}
+                    <input defaultValue={e?.observacao||""} key={"obs-"+(cl.id)+"-"+(filterMonth)+""}
                       onBlur={ev=>upsertObs(cl.id,ev.target.value)}
                       placeholder="Observações / ações..."
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"/>
@@ -2738,11 +2734,11 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
               <td className="px-4 py-3 text-emerald-400 font-bold">{fmt(totals.fat)}</td>
               <td className="px-4 py-3 text-amber-400/80 font-bold">{fmt(totals.fatPrev)}</td>
               <td className="px-4 py-3 font-bold">
-                {totals.fatPrev>0&&<span className={`text-xs font-bold px-2 py-0.5 rounded ${totals.fat>=totals.fatPrev?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400"}`}>{totals.fat>=totals.fatPrev?"+":""}{((totals.fat-totals.fatPrev)/totals.fatPrev*100).toFixed(1)}%</span>}
+                {totals.fatPrev>0&&<span className={"text-xs font-bold px-2 py-0.5 rounded "+(totals.fat>=totals.fatPrev?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400")+""}>{totals.fat>=totals.fatPrev?"+":""}{((totals.fat-totals.fatPrev)/totals.fatPrev*100).toFixed(1)}%</span>}
               </td>
               <td className="px-4 py-3 text-red-400 font-bold">{fmt(totals.custos)}</td>
               <td className="px-4 py-3 text-purple-400 font-bold">{fmt(totals.imposto)}</td>
-              <td className={`px-4 py-3 font-bold text-lg ${totals.saldo>=0?"text-emerald-400":"text-red-400"}`}>{fmt(totals.saldo)}</td>
+              <td className={"px-4 py-3 font-bold text-lg "+(totals.saldo>=0?"text-emerald-400":"text-red-400")+""}>{fmt(totals.saldo)}</td>
               <td className="px-4 py-3"/>
             </tr></tfoot>
           </table>
@@ -2754,7 +2750,7 @@ function ResultadoTab({ clients, revenues, forecastEntries, setForecastEntries, 
           <BarChart data={rows.map(r=>({name:r.cl.code,Previsto:r.fatPrev||null,Realizado:r.fat>0&&r.fatSrc==="real"?r.fat:null,Saldo:r.saldo}))} barSize={20}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
             <XAxis dataKey="name" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:12}}/>
-            <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
+            <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={v=>""+((v/1000).toFixed(0))+"k"}/>
             <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8}} formatter={v=>v?fmt(v):"—"}/>
             <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
             <Bar dataKey="Previsto" fill="#f59e0b" radius={[4,4,0,0]}/>
@@ -2806,7 +2802,7 @@ function ForecastView({ clients, revenues, forecastEntries, setForecastEntries, 
       <div className="flex gap-2">
         {[["previsao","📋 Previsão"],["resultado","📊 Previsto × Realizado"]].map(([v,l]) => (
           <button key={v} onClick={() => setSubTab(v)}
-            className={`text-sm px-4 py-2 rounded-lg font-semibold border transition-all ${subTab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}>
+            className={"text-sm px-4 py-2 rounded-lg font-semibold border transition-all "+(subTab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500")+""}>
             {l}
           </button>
         ))}
@@ -2876,7 +2872,7 @@ function calcFechamento(linhas, motoristas) {
         // format DD/MM/YYYY
         const p = dataStr.split("/");
         if (p.length === 3) {
-          const d = new Date(`${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}T12:00:00`);
+          const d = new Date(""+(p[2])+"-"+(p[1].padStart(2,"0"))+"-"+(p[0].padStart(2,"0"))+"T12:00:00");
           return isNaN(d) ? -1 : d.getDay();
         }
         return -1;
@@ -3001,12 +2997,12 @@ function exportarCSV(fec) {
   ]);
 
   const csv = "\uFEFF" + rows.map(r =>
-    r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")
+    r.map(v => """+(String(v).replace(/"/g,'""'))+""").join(";")
   ).join("\n");
 
   const a = document.createElement("a");
   a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-  a.download = `fechamento_${fec.periodo.replace(/[^a-zA-Z0-9-]/g,"_")}.csv`;
+  a.download = "fechamento_"+(fec.periodo.replace(/[^a-zA-Z0-9-]/g,"_"))+".csv";
   document.body.appendChild(a);
   a.click();
   setTimeout(() => document.body.removeChild(a), 100);
@@ -3027,7 +3023,7 @@ function MotoristasView({ motoristas, setMotoristas }) {
         <Btn onClick={() => setShowNew(true)}><Plus size={14} />Novo Motorista</Btn>
       </div>
       {motoristas.map(m => (
-        <Card key={m.id} className={`p-4 ${!m.ativo ? "opacity-50" : ""}`}>
+        <Card key={m.id} className={"p-4 "+(!m.ativo ? "opacity-50" : "")+""}>
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -3035,7 +3031,7 @@ function MotoristasView({ motoristas, setMotoristas }) {
                 <Badge color="#60a5fa">Mat: {m.matricula}</Badge>
                 <Badge color={m.ativo ? "#10b981" : "#64748b"}>{m.ativo ? "Ativo" : "Inativo"}</Badge>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">{m.email}{m.telefone ? ` · ${m.telefone}` : ""}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{m.email}{m.telefone ? " · "+(m.telefone)+"" : ""}</p>
               <div className="flex items-center gap-2 mt-1.5">
                 <p className="text-xs text-slate-500">Código portal:</p>
                 <code className="text-xs font-mono text-red-400 bg-red-500/10 border border-amber-500/20 rounded px-2 py-0.5 select-all tracking-wider">{m.codigoAcesso || "—"}</code>
@@ -3054,7 +3050,7 @@ function MotoristasView({ motoristas, setMotoristas }) {
             <div className="flex gap-2 flex-shrink-0">
               <Btn variant="secondary" size="sm" onClick={() => setEdit(m)}><Edit2 size={12} /></Btn>
               <button onClick={() => setMotoristas(p => p.map(x => x.id === m.id ? { ...x, ativo: !x.ativo } : x))}
-                className={`text-xs px-2 py-1 rounded border font-semibold ${m.ativo ? "border-red-500/30 text-red-400" : "border-emerald-500/30 text-emerald-400"}`}>
+                className={"text-xs px-2 py-1 rounded border font-semibold "+(m.ativo ? "border-red-500/30 text-red-400" : "border-emerald-500/30 text-emerald-400")+""}>
                 {m.ativo ? "Desativar" : "Ativar"}
               </button>
               <button onClick={() => setMotoristas(p => p.filter(x => x.id !== m.id))} className="text-slate-600 hover:text-red-400 p-1"><Trash2 size={13} /></button>
@@ -3072,7 +3068,7 @@ function MotoristaModal({ initial, onClose, onSave }) {
   const genCode = (nome, mat) => {
     const init = nome.trim().split(" ").slice(0,3).map(w=>w[0]?.toUpperCase()||"X").join("");
     const num = mat ? mat.slice(-4) : Math.floor(1000+Math.random()*9000).toString();
-    return `AGR-${init.padEnd(3,"X")}-${num}`;
+    return "AGR-"+(init.padEnd(3,"X"))+"-"+(num)+"";
   };
   const [f, sf_] = useState(() => {
     if (initial) return {...initial, diasDiaria: initial.diasDiaria || [1,2,3,4,5]};
@@ -3100,7 +3096,7 @@ function MotoristaModal({ initial, onClose, onSave }) {
   const showP = ["pacote","ambos","diaria_excedente","diaria_por_dia"].includes(f.tipoPagamento);
   const showDias = f.tipoPagamento === "diaria_por_dia";
   const prev  = f.tipoPagamento==="diaria_excedente" && f.minimoPackotes>0
-    ? `Ex: fez ${Number(f.minimoPackotes)+10} pcts → ${fmt(f.valorDiaria)} + (10×${fmt(f.valorPacote)}) = ${fmt(Number(f.valorDiaria)+10*Number(f.valorPacote))}`
+    ? "Ex: fez "+(Number(f.minimoPackotes)+10)+" pcts → "+(fmt(f.valorDiaria))+" + (10×"+(fmt(f.valorPacote))+") = "+(fmt(Number(f.valorDiaria)+10*Number(f.valorPacote)))+""
     : null;
   const handleContrato = async e => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -3117,7 +3113,7 @@ function MotoristaModal({ initial, onClose, onSave }) {
       <div className="flex gap-1.5 mb-5 flex-wrap">
         {TABS.map(([v,l]) => (
           <button key={v} type="button" onClick={() => setTab(v)}
-            className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}>
+            className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500")+""}>
             {l}
           </button>
         ))}
@@ -3140,7 +3136,7 @@ function MotoristaModal({ initial, onClose, onSave }) {
             <p className="text-xs font-semibold text-amber-400">Código de Acesso ao Portal</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-sm font-mono text-amber-300 bg-slate-900 border border-amber-500/30 rounded px-3 py-2 tracking-wider">{f.codigoAcesso || "—"}</code>
-              <button type="button" onClick={() => sf_((p) => ({...p, codigoAcesso: `AGR-${(p.nome||"XXX").trim().split(" ").slice(0,3).map(w=>w[0]?.toUpperCase()||"X").join("").padEnd(3,"X")}-${Math.floor(1000+Math.random()*9000)}`}))}
+              <button type="button" onClick={() => sf_((p) => ({...p, codigoAcesso: "AGR-"+((p.nome||"XXX").trim().split(" ").slice(0,3).map(w=>w[0]?.toUpperCase()||"X").join("").padEnd(3,"X"))+"-"+(Math.floor(1000+Math.random()*9000))+""}))}
                 className="text-xs text-amber-400 hover:text-amber-300 border border-amber-500/30 rounded px-2 py-1.5 hover:bg-amber-500/10 transition-all whitespace-nowrap">
                 Gerar novo
               </button>
@@ -3173,7 +3169,7 @@ function MotoristaModal({ initial, onClose, onSave }) {
                           const cur = f.diasDiaria||[];
                           sf("diasDiaria", active ? cur.filter(d=>d!==dow) : [...cur,dow].sort());
                         }}
-                        className={`text-xs px-3 py-1.5 rounded-lg font-semibold border transition-all ${active?"bg-amber-500/20 text-amber-400 border-amber-500/40":"bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500"}`}>
+                        className={"text-xs px-3 py-1.5 rounded-lg font-semibold border transition-all "+(active?"bg-amber-500/20 text-amber-400 border-amber-500/40":"bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500")+""}>
                         {label}
                       </button>
                     );
@@ -3321,7 +3317,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
         (m.correcoes||[]).forEach(cr => {
           if (!cr.ncte) return;
           if (!map[cr.ncte]) map[cr.ncte] = [];
-          map[cr.ncte].push({ fecDesc: `${f.descricao} (correção)`, motNome: m.nome, fecId: f.id });
+          map[cr.ncte].push({ fecDesc: ""+(f.descricao)+" (correção)", motNome: m.nome, fecId: f.id });
         });
       });
     });
@@ -3398,9 +3394,9 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
           const m = firstData[1].padStart(2,"0"), y = firstData[2];
           const mesNome = MONTHS_SHORT[Number(m)-1];
           const qLabel = q === "1Q" ? "1ª Quinzena" : "2ª Quinzena";
-          setPeriodo(`${y}-${m}-${q}`);
+          setPeriodo(""+(y)+"-"+(m)+"-"+(q)+"");
           setQuinzena(q);
-          setDescricao(`${qLabel} ${mesNome} ${y}`);
+          setDescricao(""+(qLabel)+" "+(mesNome)+" "+(y)+"");
         }
       }
       setStep("preview");
@@ -3425,7 +3421,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: ""+(totais.ctes)+" CTEs · "+(mots.length)+" motoristas · "+(calc.nok?.length||0)+" sem cadastro${dupes.length ? " · ${dupes.length} duplicatas ignoradas` : ""}` }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -3462,7 +3458,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
         {step === "preview" && calc && (<>
           {/* Quinzena badge */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className={`px-3 py-1.5 rounded-full text-sm font-bold border ${quinzena==="1Q"?"bg-blue-500/20 border-blue-500/40 text-blue-300":"bg-purple-500/20 border-purple-500/40 text-purple-300"}`}>
+            <div className={"px-3 py-1.5 rounded-full text-sm font-bold border "+(quinzena==="1Q"?"bg-blue-500/20 border-blue-500/40 text-blue-300":"bg-purple-500/20 border-purple-500/40 text-purple-300")+""}>
               {quinzena === "1Q" ? "📅 1ª Quinzena (dias 1–15)" : "📅 2ª Quinzena (dias 16–fim)"}
             </div>
             <Input label="" placeholder="Descrição" value={descricao} onChange={e => setDescricao(e.target.value)} />
@@ -3526,9 +3522,9 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
                   <div className="text-right">
                     <p className="font-bold text-emerald-400">{fmt(c.subtotal)}</p>
                     <p className="text-xs text-slate-500">
-                      {c.vDiaria > 0 ? `d: ${fmt(c.vDiaria)}` : ""}
+                      {c.vDiaria > 0 ? "d: "+(fmt(c.vDiaria))+"" : ""}
                       {c.vDiaria > 0 && c.vPacotes > 0 ? " + " : ""}
-                      {c.vPacotes > 0 ? `p: ${fmt(c.vPacotes)}` : ""}
+                      {c.vPacotes > 0 ? "p: "+(fmt(c.vPacotes))+"" : ""}
                     </p>
                   </div>
                 </div>
@@ -3563,18 +3559,18 @@ function CorrecaoModal({ nome, onClose, onSave }) {
   const valorFinal = f.tipo === "debito" ? -Math.abs(Number(f.valor)||0) : Math.abs(Number(f.valor)||0);
   const ok = f.ncte && f.justificativa && f.valor !== "" && Number(f.valor) > 0;
   return (
-    <Modal title={`Correção Manual — ${nome}`} onClose={onClose}>
+    <Modal title={"Correção Manual — "+(nome)+""} onClose={onClose}>
       <div className="space-y-3">
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
           CTE adicionado manualmente ao fechamento. O tipo define se vai somar (Acréscimo) ou descontar (Débito) do total.
         </div>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => up("tipo","acrescimo")}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border font-semibold text-sm transition-all ${f.tipo==="acrescimo"?"bg-emerald-500/20 border-emerald-500/50 text-emerald-300":"bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"}`}>
+            className={"flex items-center justify-center gap-2 py-2.5 rounded-lg border font-semibold text-sm transition-all "+(f.tipo==="acrescimo"?"bg-emerald-500/20 border-emerald-500/50 text-emerald-300":"bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500")+""}>
             <Plus size={14}/>Acréscimo
           </button>
           <button type="button" onClick={() => up("tipo","debito")}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border font-semibold text-sm transition-all ${f.tipo==="debito"?"bg-red-500/20 border-red-500/50 text-red-300":"bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"}`}>
+            className={"flex items-center justify-center gap-2 py-2.5 rounded-lg border font-semibold text-sm transition-all "+(f.tipo==="debito"?"bg-red-500/20 border-red-500/50 text-red-300":"bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500")+""}>
             <X size={14}/>Débito
           </button>
         </div>
@@ -3584,11 +3580,11 @@ function CorrecaoModal({ nome, onClose, onSave }) {
         </div>
         <TA label="Justificativa *" placeholder="Motivo da correção manual..." rows={3} value={f.justificativa} onChange={e=>up("justificativa",e.target.value)}/>
         <div>
-          <Input label={`Valor (R$) — ${f.tipo === "acrescimo" ? "será somado ao total" : "será descontado do total"}`}
+          <Input label={"Valor (R$) — "+(f.tipo === "acrescimo" ? "será somado ao total" : "será descontado do total")+""}
             type="number" step="0.01" placeholder="Ex: 50.00" value={f.valor} onChange={e=>up("valor",e.target.value)}/>
           {f.valor && Number(f.valor) > 0 && (
-            <p className={`text-xs mt-1 font-semibold ${f.tipo==="acrescimo"?"text-emerald-400":"text-red-400"}`}>
-              {f.tipo==="acrescimo" ? `+ ${fmt(valorFinal)} (Acréscimo)` : `- ${fmt(Math.abs(valorFinal))} (Débito)`}
+            <p className={"text-xs mt-1 font-semibold "+(f.tipo==="acrescimo"?"text-emerald-400":"text-red-400")+""}>
+              {f.tipo==="acrescimo" ? "+ "+(fmt(valorFinal))+" (Acréscimo)" : "- "+(fmt(Math.abs(valorFinal)))+" (Débito)"}
             </p>
           )}
         </div>
@@ -3613,7 +3609,7 @@ function PagMotBtn({ motId, fecId, setFechamentos, userName, mots }) {
         ...c, etapa: "pago", dataPagMot: now(), comprovanteMot: { nome: file.name, data }
       });
       const allPago = newMots.every(c => (c.etapa||"agr") === "pago");
-      const hist = [...f.hist, { acao: `Pagamento confirmado — ${newMots.find(c=>c.id===motId)?.nome}`, quem: userName, ts: now(), obs: file.name }];
+      const hist = [...f.hist, { acao: "Pagamento confirmado — "+(newMots.find(c=>c.id===motId)?.nome)+"", quem: userName, ts: now(), obs: file.name }];
       return { ...f, mots: newMots, status: allPago ? "pago" : f.status, hist };
     }));
     if (ref.current) ref.current.value = "";
@@ -3709,7 +3705,7 @@ function ResumoFinMots({ mots, total }) {
         <div className="flex gap-1">
           {[["todos","Todos"],["diaria","Diária"],["pacote","CTE"],["ambos","Ambos"]].map(([v,l])=>(
             <button key={v} onClick={()=>setFiltTipo(v)}
-              className={`text-xs px-2 py-1 rounded border font-medium transition-all ${filtTipo===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+              className={"text-xs px-2 py-1 rounded border font-medium transition-all "+(filtTipo===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")+""}>{l}</button>
           ))}
         </div>
       </div>
@@ -3718,7 +3714,7 @@ function ResumoFinMots({ mots, total }) {
           <thead>
             <tr className="border-b border-slate-700 text-slate-400">
               {["Motorista","Dias","CTEs entregues","Média/Dia","Valor Ganho","Valor/CTE","Tipo"].map(h=>(
-                <th key={h} className={`py-2 px-2 font-semibold ${h==="Motorista"?"text-left":"text-right"}`}>{h}</th>
+                <th key={h} className={"py-2 px-2 font-semibold "+(h==="Motorista"?"text-left":"text-right")+""}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -3729,17 +3725,17 @@ function ResumoFinMots({ mots, total }) {
               const mediaCTE=ent>0?(ganho/ent):0; const tipo=c.tipo||"pacote";
               const isDiaria=tipo==="diaria"||tipo==="ambos"||tipo==="diaria_excedente";
               return (
-                <tr key={c.id} className={`border-b border-slate-800 hover:bg-slate-800/40 ${isDiaria?"bg-amber-500/5":""}`}>
+                <tr key={c.id} className={"border-b border-slate-800 hover:bg-slate-800/40 "+(isDiaria?"bg-amber-500/5":"")+""}>
                   <td className="py-2 px-2 font-semibold text-slate-100">{isDiaria&&<span className="text-amber-400 mr-1">⭐</span>}{c.nome}</td>
                   <td className="py-2 px-2 text-right text-amber-400 font-bold">{dias}</td>
                   <td className="py-2 px-2 text-right text-emerald-400 font-semibold">{ent.toLocaleString("pt-BR")}</td>
                   <td className="py-2 px-2 text-right">
-                    <span className={`font-semibold ${mediaDia>=20?"text-emerald-400":mediaDia>=10?"text-amber-400":"text-red-400"}`}>{mediaDia.toFixed(1)}</span>
+                    <span className={"font-semibold "+(mediaDia>=20?"text-emerald-400":mediaDia>=10?"text-amber-400":"text-red-400")+""}>{mediaDia.toFixed(1)}</span>
                   </td>
                   <td className="py-2 px-2 text-right text-emerald-400 font-bold">{fmt(ganho)}</td>
                   <td className="py-2 px-2 text-right text-slate-300 font-semibold">{mediaCTE>0?fmt(mediaCTE):"—"}</td>
                   <td className="py-2 px-2 text-right">
-                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${tipo==="diaria"?"bg-amber-500/20 text-amber-400":tipo==="ambos"||tipo==="diaria_excedente"?"bg-blue-500/20 text-blue-400":"bg-emerald-500/20 text-emerald-400"}`}>
+                    <span className={"px-1.5 py-0.5 rounded text-xs font-medium "+(tipo==="diaria"?"bg-amber-500/20 text-amber-400":tipo==="ambos"||tipo==="diaria_excedente"?"bg-blue-500/20 text-blue-400":"bg-emerald-500/20 text-emerald-400")+""}>
                       {tipo==="diaria"?"Diária":tipo==="ambos"?"Diária+CTE":tipo==="diaria_excedente"?"Diária+Exc.":tipo==="diaria_por_dia"?"Diária/Dia":"CTE"}
                     </span>
                   </td>
@@ -3965,13 +3961,13 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
   };
 
   const advanceMotTo = (motId, novaEtapa, obs = "") => {
-    const mots = fec.mots.map(c => c.id !== motId ? c : { ...c, etapa: novaEtapa, [`status_${novaEtapa}`]: "ok", [`obs_${novaEtapa}`]: obs });
-    upd({ mots, status: getFecStatus(mots), hist: hist(`→ ${MOT_ETAPA[novaEtapa]?.label||novaEtapa}`, `${fec.mots.find(c=>c.id===motId)?.nome}${obs?" — "+obs:""}`) });
+    const mots = fec.mots.map(c => c.id !== motId ? c : { ...c, etapa: novaEtapa, ["status_"+(novaEtapa)+""]: "ok", ["obs_"+(novaEtapa)+""]: obs });
+    upd({ mots, status: getFecStatus(mots), hist: hist("→ "+(MOT_ETAPA[novaEtapa]?.label||novaEtapa)+"", ""+(fec.mots.find(c=>c.id===motId)?.nome)+""+(obs?" — "+obs:"")+"") });
   };
 
   const rejectMotTo = (motId, targetEtapa, obs = "") => {
-    const mots = fec.mots.map(c => c.id !== motId ? c : { ...c, etapa: targetEtapa, [`obs_reject_${targetEtapa}`]: obs });
-    upd({ mots, status: getFecStatus(mots), hist: hist(`Devolvido para ${MOT_ETAPA[targetEtapa]?.label}`, `${fec.mots.find(c=>c.id===motId)?.nome}${obs?" — "+obs:""}`) });
+    const mots = fec.mots.map(c => c.id !== motId ? c : { ...c, etapa: targetEtapa, ["obs_reject_"+(targetEtapa)+""]: obs });
+    upd({ mots, status: getFecStatus(mots), hist: hist("Devolvido para "+(MOT_ETAPA[targetEtapa]?.label)+"", ""+(fec.mots.find(c=>c.id===motId)?.nome)+""+(obs?" — "+obs:"")+"") });
   };
 
   const pagarMot = async (motId, file, valorPago, motivoAjuste) => {
@@ -3997,7 +3993,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       };
     });
     const allPago = mots.every(c => c.etapa === "pago");
-    const obsText = `${mot?.nome} — ${fmt(valorFinal)}${debito > 0 ? ` (débito de ${fmt(debito)}: ${motivoAjuste})` : ""} — ${file.name}`;
+    const obsText = ""+(mot?.nome)+" — "+(fmt(valorFinal))+"${debito > 0 ? " (débito de ${fmt(debito)}: ${motivoAjuste})" : ""} — "+(file.name)+"";
     upd({ mots, status: allPago ? "pago" : fec.status, hist: hist("Motorista pago", obsText) });
   };
 
@@ -4008,7 +4004,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       const extra = nc.reduce((s, x) => s + x.valor, 0);
       return { ...c, correcoes: nc, totalBruto: c.subtotal + extra };
     });
-    upd({ mots, hist: hist("Correção manual", `CTE ${corr.ncte}${corr.data ? ` (${corr.data})` : ""} — ${corr.justificativa}`) });
+    upd({ mots, hist: hist("Correção manual", "CTE "+(corr.ncte)+"${corr.data ? " (${corr.data})" : ""} — "+(corr.justificativa)+"") });
     setShowCorr(null);
   };
 
@@ -4060,7 +4056,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
           <div className="flex items-center gap-1 flex-wrap text-xs">
             {[["op","Operacional"],["gest","Gestor"],["fin","Financeiro"],["agr","Agregado"],["pago","Pago"]].map(([k,l],i,arr)=>(
               <div key={k} className="flex items-center gap-1">
-                <span className={`px-2 py-1 rounded border font-medium ${fec.status===k?"bg-amber-500/20 border-amber-500/50 text-amber-300":"border-slate-700 text-slate-500"}`}>{l}</span>
+                <span className={"px-2 py-1 rounded border font-medium "+(fec.status===k?"bg-amber-500/20 border-amber-500/50 text-amber-300":"border-slate-700 text-slate-500")+""}>{l}</span>
                 {i<arr.length-1&&<ChevronRight size={10} className="text-slate-600"/>}
               </div>
             ))}
@@ -4085,7 +4081,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
           ...(userHasDRE(user) ? [["financeiro","💰 Saldo Financeiro"]] : []),
           ["links","🔗 Links Agregados"],["hist","📜 Histórico"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
-            className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab === v ? "bg-red-600 text-white border-red-600" : "bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+            className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab === v ? "bg-red-600 text-white border-red-600" : "bg-slate-800 text-slate-400 border-slate-700")+""}>{l}</button>
         ))}
       </div>
 
@@ -4213,11 +4209,11 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                         <Btn size="sm" variant="secondary" onClick={()=>setShowCorr(c.id)}><Plus size={12}/>Corrigir CTE</Btn>
                         <Btn size="sm" variant="success" onClick={()=>{
                           const mots=fec.mots.map(cc=>cc.id!==c.id?cc:{...cc,etapa:"rev_gestor",decisaoOp:"confirmou",obsOp:"Operação confirmou valores corretos"});
-                          upd({mots,hist:hist(`Op. confirmou correto → gestor — ${c.nome}`)});
+                          upd({mots,hist:hist("Op. confirmou correto → gestor — "+(c.nome)+"")});
                         }}><Check size={12}/>Confirmar Correto → Gestor</Btn>
                         <Btn size="sm" variant="blue" onClick={()=>{
                           const mots=fec.mots.map(cc=>cc.id!==c.id?cc:{...cc,etapa:"rev_gestor",decisaoOp:"refez",obsOp:"Operação refez o fechamento"});
-                          upd({mots,hist:hist(`Op. refez fechamento → gestor — ${c.nome}`)});
+                          upd({mots,hist:hist("Op. refez fechamento → gestor — "+(c.nome)+"")});
                         }}><RefreshCw size={12}/>Refez → Encaminhar Gestor</Btn>
                       </div>
                     </div>
@@ -4228,11 +4224,11 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                       <div className="flex gap-2">
                         <Btn size="sm" variant="success" onClick={()=>{
                           const mots=fec.mots.map(cc=>cc.id!==c.id?cc:{...cc,etapa:"agr",statusAgr:"pendente",comentarioAgr:"",nf:null,contestacao:null});
-                          upd({mots,hist:hist(`Gestor validou → reenviado ao agregado — ${c.nome}`)});
+                          upd({mots,hist:hist("Gestor validou → reenviado ao agregado — "+(c.nome)+"")});
                         }}><Check size={12}/>Validar → Reenviar ao Agregado</Btn>
                         <Btn size="sm" variant="danger" onClick={()=>{
                           const mots=fec.mots.map(cc=>cc.id!==c.id?cc:{...cc,etapa:"revisao_op"});
-                          upd({mots,hist:hist(`Gestor devolveu à operação — ${c.nome}`)});
+                          upd({mots,hist:hist("Gestor devolveu à operação — "+(c.nome)+"")});
                         }}><X size={12}/>Devolver à Operação</Btn>
                       </div>
                     </div>
@@ -4241,9 +4237,9 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                     <div className="mt-2 space-y-1">
                       {c.correcoes.map(cr => (
                         <div key={cr.id} className="flex items-center justify-between bg-slate-900 rounded px-3 py-2 border border-blue-500/20">
-                          <div><p className="text-xs font-semibold text-blue-300">CTE: {cr.ncte}{cr.data?` · ${cr.data}`:""}</p><p className="text-xs text-slate-400">{cr.justificativa}</p></div>
+                          <div><p className="text-xs font-semibold text-blue-300">CTE: {cr.ncte}{cr.data?" · "+(cr.data)+"":""}</p><p className="text-xs text-slate-400">{cr.justificativa}</p></div>
                           <div className="flex items-center gap-2">
-                            <span className={`text-sm font-bold ${cr.valor>=0?"text-emerald-400":"text-red-400"}`}>{cr.valor>=0?"+":""}{fmt(cr.valor)}</span>
+                            <span className={"text-sm font-bold "+(cr.valor>=0?"text-emerald-400":"text-red-400")+""}>{cr.valor>=0?"+":""}{fmt(cr.valor)}</span>
                             {canEditCTE(etapa) && <button onClick={() => removeCorr(c.id, cr.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={12}/></button>}
                           </div>
                         </div>
@@ -4342,7 +4338,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                       <span className="text-blue-400 font-mono">{cr.ncte}</span>
                       {cr.data && <span className="text-slate-400">{cr.data}</span>}
                       <span className="text-slate-400 flex-1">{cr.justificativa}</span>
-                      <span className={`font-bold ${cr.valor>=0?"text-emerald-400":"text-red-400"}`}>{cr.valor>=0?"+":""}{fmt(cr.valor)}</span>
+                      <span className={"font-bold "+(cr.valor>=0?"text-emerald-400":"text-red-400")+""}>{cr.valor>=0?"+":""}{fmt(cr.valor)}</span>
                     </div>
                   ))}
                 </div>
@@ -4434,7 +4430,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
                   <p className="text-sm font-semibold text-slate-200">{h.acao}</p>
                   <span className="text-xs text-slate-500">{fmtDate(h.ts)}</span>
                 </div>
-                <p className="text-xs text-slate-400">{h.quem}{h.obs ? ` — ${h.obs}` : ""}</p>
+                <p className="text-xs text-slate-400">{h.quem}{h.obs ? " — "+(h.obs)+"" : ""}</p>
               </div>
             </div>
           ))}
@@ -4456,6 +4452,565 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
 // ─────────────────────────────────────────────
 // DRE INTEGRADO AO FECHAMENTO
 // ─────────────────────────────────────────────
+function SLABadge({ criadoEm, slaDias, prazoData }) {
+  // Use prazoData (specific date) if set
+  if (prazoData) {
+    const prazo = new Date(prazoData+"T23:59:59");
+    const now_  = new Date();
+    const diffMs = prazo - now_;
+    const diffD  = Math.ceil(diffMs/(1000*60*60*24));
+    const cls = diffD<=0?"bg-red-500/20 text-red-400":diffD<=2?"bg-amber-500/20 text-amber-400":"bg-blue-500/20 text-blue-400";
+    return <span className={"text-xs font-bold px-2 py-0.5 rounded "+cls}>{diffD<=0?"Vencido":diffD+"d restantes"}</span>;
+  }
+  // Fall back to business days
+  const FERIADOS = new Set(["01/01","21/04","01/05","07/09","12/10","02/11","15/11","25/12"]);
+  const isFer = d => { const s=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); return FERIADOS.has(s); };
+  const cur = new Date(criadoEm||new Date()); cur.setDate(cur.getDate()+1); cur.setHours(0,0,0,0);
+  const end = new Date(); end.setHours(0,0,0,0);
+  let du = 0; const tmp = new Date(cur);
+  while(tmp<=end){if(tmp.getDay()!==0&&tmp.getDay()!==6&&!isFer(tmp))du++;tmp.setDate(tmp.getDate()+1);}
+  const rest = (slaDias||5) - du;
+  const cls = rest<=0 ? "bg-red-500/20 text-red-400" : rest<=2 ? "bg-amber-500/20 text-amber-400" : "bg-blue-500/20 text-blue-400";
+  return <span className={"text-xs font-bold px-2 py-0.5 rounded "+cls}>{rest<=0?"Vencido":rest+"d restantes"}</span>;
+}
+
+// ─────────────────────────────────────────────
+// ATENDIMENTO — ACAREAÇÃO COM AGREGADOS
+// ─────────────────────────────────────────────
+const TICKET_STATUS = {
+  aberto:     { label:"Aberto",           cor:"#f59e0b" },
+  aguardando: { label:"Aguard. Agregado", cor:"#60a5fa" },
+  respondido: { label:"Respondido",       cor:"#10b981" },
+  contestado: { label:"Contestado",       cor:"#a78bfa" },
+  debitado:   { label:"Debitado",         cor:"#ef4444" },
+  encerrado:  { label:"Encerrado",        cor:"#64748b" },
+};
+
+const SLA_DIAS_TICKET = 5; // dias úteis para o agregado responder
+
+// ── Atendimento helpers ──
+const exportarPDF = (tickets, filtStatus, motoristas) => {
+  const alvo = tickets.filter(t => filtStatus === "todos"
+    ? ["aberto","aguardando","respondido"].includes(t.status)
+    : t.status === filtStatus);
+
+  if (!alvo.length) { alert("Nenhum ticket para exportar."); return; }
+
+  const rows = alvo.map(t => {
+    const mot = motoristas.find(m=>m.id===t.motoristaId);
+    const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+    return `<div class="ticket">
+      <div class="ticket-header">
+        <div><div class="ticket-code">#${t.id.slice(-6).toUpperCase()}</div>
+        <div class="ticket-title">${t.titulo||""}</div></div>
+        <div class="ticket-badge" style="border-color:${st.cor};color:${st.cor}">${st.label}</div>
+      </div>
+      <table class="info-table">
+        <tr><td class="label">Agregado</td><td>${mot?.nome||t.nomeAgregado||"—"} — Mat. ${mot?.matricula||"—"}</td></tr>
+        <tr><td class="label">Valor</td><td class="valor">R$ ${(t.valor||0).toFixed(2).replace(".",",")}</td></tr>
+        <tr><td class="label">Prazo</td><td>${t.slaDias||SLA_DIAS_TICKET} dias úteis</td></tr>
+        <tr><td class="label">Aberto em</td><td>${(t.criadoEm||"").slice(0,10)} por ${t.criadoNome||"—"}</td></tr>
+        <tr><td class="label">Status</td><td style="color:${st.cor};font-weight:bold">${st.label}</td></tr>
+      </table>
+      ${t.descricao?`<div class="section-label">Descrição</div><div class="descricao">${t.descricao}</div>`:""}
+      <div class="assinaturas">
+        <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Operação / ${t.criadoNome||"—"}</div></div>
+        <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Agregado / ${mot?.nome||t.nomeAgregado||"—"}</div></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  const css = `@page{size:A4;margin:20mm 15mm}body{font-family:Arial;font-size:11pt;color:#111;margin:0}
+    .ticket{border:2px solid #1e293b;border-radius:8px;padding:20px;margin-bottom:24px;page-break-inside:avoid}
+    .ticket-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid #e2e8f0;padding-bottom:12px}
+    .ticket-code{font-size:10pt;color:#64748b;font-family:monospace}.ticket-title{font-size:14pt;font-weight:bold;color:#0f172a;margin-top:4px}
+    .ticket-badge{border:2px solid;border-radius:20px;padding:4px 12px;font-size:10pt;font-weight:bold}
+    .info-table{width:100%;border-collapse:collapse;margin-bottom:14px}.info-table td{padding:5px 8px;border-bottom:1px solid #f1f5f9}
+    .label{color:#64748b;font-size:10pt;width:140px;font-weight:600}.valor{font-size:13pt;font-weight:bold;color:#dc2626}
+    .section-label{font-size:9pt;color:#64748b;font-weight:700;text-transform:uppercase;margin:10px 0 4px}
+    .descricao{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;font-size:10.5pt;white-space:pre-wrap}
+    .assinaturas{display:flex;gap:40px;margin-top:28px}.assinatura-box{flex:1;text-align:center}
+    .linha{border-top:1.5px solid #1e293b;margin-bottom:6px}.assinatura-label{font-size:9.5pt;color:#475569}
+    .header-doc{text-align:center;margin-bottom:30px}.header-doc h1{font-size:16pt;color:#0f172a;margin:0}
+    .header-doc p{font-size:10pt;color:#64748b;margin:4px 0 0}`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Acareações</title><style>${css}</style></head><body>
+    <div class="header-doc"><h1>Grupo All Logística — Acareações</h1>
+    <p>Emitido em ${new Date().toLocaleDateString("pt-BR")} · ${alvo.length} ticket(s)</p></div>
+    ${rows}<script>window.onload=()=>window.print();</script></body></html>`;
+
+  // Use blob URL instead of window.open to avoid popup blockers
+  const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+};
+
+// Export single ticket as Word (.doc)
+const exportarWord = (t, motoristas) => {
+  if (!t) return;
+  const mot = motoristas.find(m=>m.id===t.motoristaId);
+  const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"><head><meta charset="UTF-8">
+  <style>body{font-family:Arial;font-size:11pt;margin:2cm}h1{font-size:16pt;border-bottom:2pt solid #000;padding-bottom:8pt}
+  table{width:100%;border-collapse:collapse}td{padding:6pt 10pt;border-bottom:1pt solid #ddd}
+  .label{color:#666;width:140pt;font-weight:bold}.valor{color:#dc2626;font-size:14pt;font-weight:bold}
+  .desc{background:#f8fafc;padding:10pt;border:1pt solid #e2e8f0;white-space:pre-wrap}
+  </style></head><body>
+  <h1>ACAREAÇÃO — #${t.id.slice(-6).toUpperCase()}</h1>
+  <p><b>Grupo All Logística</b> — ${new Date().toLocaleDateString("pt-BR")}</p>
+  <table>
+    <tr><td class="label">Título</td><td>${t.titulo||""}</td></tr>
+    <tr><td class="label">Agregado</td><td>${mot?.nome||t.nomeAgregado||"—"} — Mat. ${mot?.matricula||"—"}</td></tr>
+    <tr><td class="label">Valor do Prejuízo</td><td class="valor">R$ ${(t.valor||0).toFixed(2).replace(".",",")}</td></tr>
+    <tr><td class="label">Prazo</td><td>${t.slaDias||SLA_DIAS_TICKET} dias úteis</td></tr>
+    <tr><td class="label">Status</td><td>${st.label}</td></tr>
+    <tr><td class="label">Aberto em</td><td>${(t.criadoEm||"").slice(0,10)} por ${t.criadoNome||"—"}</td></tr>
+  </table>
+  ${t.descricao?`<p><b>Descrição:</b></p><div class="desc">${t.descricao}</div>`:""}
+  <br><br>
+  <table style="margin-top:60pt"><tr>
+    <td style="width:45%;text-align:center;border-top:1pt solid #000;padding-top:6pt">Operação / ${t.criadoNome||"—"}</td>
+    <td style="width:10%"></td>
+    <td style="width:45%;text-align:center;border-top:1pt solid #000;padding-top:6pt">Agregado / ${mot?.nome||t.nomeAgregado||"—"}</td>
+  </tr></table>
+  </body></html>`;
+  const blob = new Blob(["\ufeff"+html],{type:"application/msword"});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href=url; a.download="Acareacao_"+(t.id.slice(-6).toUpperCase())+".doc"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+};
+
+// Send WhatsApp notification
+const sendWhatsApp = t => {
+  const mot = motoristas.find(m=>m.id===t.motoristaId);
+  if (!mot?.telefone) { alert("Motorista sem WhatsApp cadastrado. Cadastre o telefone em Fechamento → Motoristas."); return; }
+  const phone = mot.telefone.replace(/\D/g,"");
+  const full  = phone.startsWith("55")?phone:"55"+phone;
+  const msg   = encodeURIComponent(
+    "⚠ ACAREAÇÃO #"+(t.id.slice(-6).toUpperCase())+"\n\n"+
+    `Você recebeu uma notificação de prejuízo da Grupo All Logística.\n`+
+    "Valor: R$ "+((t.valor||0).toFixed(2).replace(".",","))+"\n"+
+    "Prazo: "+(t.slaDias||SLA_DIAS_TICKET)+" dias úteis para responder.\n\n"+
+    "Acesse o portal para responder: "+(window.location.origin)+""
+  );
+  window.open("https://wa.me/"+(full)+"?text="+(msg)+"","_blank","noopener");
+  updTicket(t.id, {status:"aguardando", whatsappEnviadoEm:now()});
+};
+  const alvo = tickets.filter(t => filtStatus === "todos"
+    ? ["aberto","aguardando","respondido"].includes(t.status)
+    : t.status === filtStatus);
+
+  if (!alvo.length) { alert("Nenhum ticket para exportar."); return; }
+
+  const rows = alvo.map(t => {
+    const mot = motoristas.find(m=>m.id===t.motoristaId);
+    const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+    return `
+      <div class="ticket">
+        <div class="ticket-header">
+          <div>
+            <div class="ticket-code">#${t.id.slice(-6).toUpperCase()}</div>
+            <div class="ticket-title">${t.titulo}</div>
+          </div>
+          <div class="ticket-badge" style="border-color:${st.cor};color:${st.cor}">${st.label}</div>
+        </div>
+        <table class="info-table">
+          <tr><td class="label">Agregado</td><td>${mot?.nome||t.nomeAgregado||"—"} — Mat. ${mot?.matricula||"—"}</td></tr>
+          <tr><td class="label">Valor do Prejuízo</td><td class="valor">R$ ${(t.valor||0).toFixed(2).replace(".",",")}</td></tr>
+          <tr><td class="label">Prazo</td><td>${t.slaDias||SLA_DIAS_TICKET} dias úteis</td></tr>
+          <tr><td class="label">Aberto em</td><td>${t.criadoEm?.slice(0,10)} por ${t.criadoNome}</td></tr>
+          <tr><td class="label">Status</td><td style="color:${st.cor};font-weight:bold">${st.label}</td></tr>
+          ${t.respondidoEm?"<tr><td class="label">Respondido em</td><td>"+(t.respondidoEm?.slice(0,16).replace("T"," "))+"</td></tr>":""}
+          ${t.debitadoEm?"<tr><td class="label">Debitado em</td><td>"+(t.debitadoEm?.slice(0,16).replace("T"," "))+"</td></tr>":""}
+        </table>
+        ${t.descricao?`<div class="section-label">Descrição</div><div class="descricao">${t.descricao}</div>`:""}
+        ${t.obs?`<div class="section-label">Observações</div><div class="descricao">${t.obs}</div>`:""}
+        <div class="assinaturas">
+          <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Operação / ${t.criadoNome}</div></div>
+          <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Agregado / ${mot?.nome||t.nomeAgregado||"—"}</div></div>
+        </div>
+      </div>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Tickets de Acareação — Grupo All Logística</title>
+
+function AtendimentoView({ user, tickets, setTickets, motoristas, users }) {
+  const [showNew, setShowNew]     = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [filtStatus, setFiltStatus] = useState("todos");
+
+  const selected = tickets.find(t=>t.id===selectedId);
+
+  const saveTicket = t => { setTickets(p=>[...p,{...t,id:uid(),criadoEm:now(),criadoPor:user.id,criadoNome:user.name}]); setShowNew(false); };
+  const updTicket  = (id,patch) => setTickets(p=>p.map(t=>t.id===id?{...t,...patch}:t));
+  const delTicket  = id => setTickets(p=>p.filter(t=>t.id!==id));
+
+  // Check SLA overdue and auto-debit
+  const checkSLA = () => {
+    const FERIADOS = new Set(["01/01","21/04","01/05","07/09","12/10","02/11","15/11","25/12"]);
+    const isFer = d => { const s=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); return FERIADOS.has(s); };
+    const calcDU = startIso => {
+      const cur = new Date(startIso); cur.setDate(cur.getDate()+1); cur.setHours(0,0,0,0);
+      const end = new Date(); end.setHours(0,0,0,0);
+      let d=0; const tmp=new Date(cur);
+      while(tmp<=end){if(tmp.getDay()!==0&&tmp.getDay()!==6&&!isFer(tmp))d++;tmp.setDate(tmp.getDate()+1);}
+      return d;
+    };
+    setTickets(p=>p.map(t=>{
+      if (t.status!=="aguardando") return t;
+      // Use prazoData (specific date) if set, otherwise fall back to slaDias
+      let venceu = false;
+      if (t.prazoData) {
+        venceu = new Date() >= new Date(t.prazoData+"T23:59:59");
+      } else {
+        const du = calcDU(t.criadoEm);
+        venceu = du > (t.slaDias||SLA_DIAS_TICKET);
+      }
+      if (venceu) return {...t, status:"debitado", debitadoEm:now(), obs:(t.obs||"")+" [Auto-debitado por vencimento de prazo]"};
+      return t;
+    }));
+  };
+
+  useEffect(()=>{ checkSLA(); }, []);
+
+  // Export all open/pending tickets as printable HTML → PDF
+  const canEdit = user.role!=="auditor";
+  const [filtDtIni, setFiltDtIni] = useState("");
+  const [filtDtFim, setFiltDtFim] = useState("");
+
+  const visible = tickets.filter(t=>{
+    if (filtStatus!=="todos" && t.status!==filtStatus) return false;
+    if (filtDtIni && (t.prazoData||t.criadoEm?.slice(0,10)) < filtDtIni) return false;
+    if (filtDtFim && (t.prazoData||t.criadoEm?.slice(0,10)) > filtDtFim) return false;
+    return true;
+  });
+
+  if (selected) return (
+    <TicketDetalheWrapper
+      ticket={selected} user={user} motoristas={motoristas}
+      onBack={()=>setSelectedId(null)}
+      onUpd={patch=>updTicket(selected.id,patch)}
+      onDel={()=>{delTicket(selected.id);setSelectedId(null);}}
+      onWhats={()=>sendWhatsApp(selected, motoristas, updTicket)}
+      onWord={()=>exportarWord(selected, motoristas)}
+      onNewTicket={t=>{ saveTicket({...t, parentId:selected.id}); updTicket(selected.id,{status:"contestado",contestadoEm:now()}); setSelectedId(null); }}
+    />
+  );
+
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div><h1 className="text-xl font-bold text-slate-100">Atendimento — Acareação</h1>
+          <p className="text-sm text-slate-400">{tickets.length} ticket(s) · {tickets.filter(t=>t.status==="aguardando").length} aguardando resposta</p></div>
+        {canEdit&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Novo Ticket</Btn>}
+        <Btn variant="secondary" onClick={()=>exportarPDF(tickets,filtStatus,motoristas)}><FileText size={14}/>Exportar PDF</Btn>
+      </div>
+
+      {/* Filter */}
+      <div className="flex gap-2 flex-wrap items-center">
+        <div className="flex gap-2 flex-wrap">
+          {[["todos","Todos"],...Object.entries(TICKET_STATUS).map(([k,v])=>[k,v.label])].map(([k,l])=>(
+            <button key={k} onClick={()=>setFiltStatus(k)}
+              className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(filtStatus===k?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")}>
+              {l} {k!=="todos"&&<span className="ml-1">({tickets.filter(t=>t.status===k).length})</span>}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-400">
+          <span>Prazo de</span>
+          <input type="date" value={filtDtIni} onChange={e=>setFiltDtIni(e.target.value)}
+            className="bg-transparent text-slate-200 text-xs focus:outline-none"/>
+          <span>até</span>
+          <input type="date" value={filtDtFim} onChange={e=>setFiltDtFim(e.target.value)}
+            className="bg-transparent text-slate-200 text-xs focus:outline-none"/>
+          {(filtDtIni||filtDtFim)&&<button onClick={()=>{setFiltDtIni("");setFiltDtFim("");}} className="text-red-400 text-xs hover:text-red-300">✕</button>}
+        </div>
+      </div>
+
+      {/* Ticket list */}
+      <div className="space-y-3">
+        {visible.length===0&&<p className="text-slate-500 text-sm text-center py-10">Nenhum ticket encontrado.</p>}
+        {visible.sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm)).map(t=>{
+          const mot   = motoristas.find(m=>m.id===t.motoristaId);
+          const st    = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+          const code  = "#"+t.id.slice(-6).toUpperCase();
+          return (
+            <Card key={t.id} className="p-4 cursor-pointer hover:border-slate-600 transition-all group" onClick={()=>setSelectedId(t.id)}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-slate-500">{code}</span>
+                    <span className="text-sm font-bold text-slate-100">{t.titulo}</span>
+                    <Badge color={st.cor}>{st.label}</Badge>
+                    {t.status==="aguardando"&&<SLABadge criadoEm={t.criadoEm} slaDias={t.slaDias} prazoData={t.prazoData}/>}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">{mot?.nome||t.nomeAgregado} · R$ {(t.valor||0).toFixed(2).replace(".",",")} · {t.criadoEm?.slice(0,10)}</p>
+                  {t.descricao&&<p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{t.descricao}</p>}
+                </div>
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                  {canEdit&&t.status==="aberto"&&(
+                    <button onClick={e=>{e.stopPropagation();sendWhatsApp(t, motoristas, updTicket);}}
+                      className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30">
+                      📱 WhatsApp
+                    </button>
+                  )}
+                  <span className="text-amber-400 text-xs font-semibold">Abrir →</span>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {showNew&&<NovoTicketModal motoristas={motoristas} onClose={()=>setShowNew(false)} onSave={saveTicket}/>}
+    </div>
+  );
+}
+
+function NovoTicketModal({ motoristas, onClose, onSave, tituloInicial }) {
+  const fileRef = useRef();
+  // Default prazo = 5 days from today
+  const defaultPrazo = new Date(); defaultPrazo.setDate(defaultPrazo.getDate()+5);
+  const defaultPrazoStr = defaultPrazo.toISOString().slice(0,10);
+  const [f, setF] = useState({ titulo:tituloInicial||"", descricao:"", motoristaId:"", nomeAgregado:"", valor:"", prazoData:defaultPrazoStr, status:"aberto", pdfNome:"", pdfData:null });
+  const sf = (k,v) => setF(p=>({...p,[k]:v}));
+
+  const handlePDF = e => {
+    const file = e.target.files?.[0]; if(!file) return;
+    const r = new FileReader();
+    r.onload = ev => { sf("pdfNome",file.name); sf("pdfData",ev.target.result); };
+    r.readAsDataURL(file);
+  };
+
+  const mot = motoristas.find(m=>m.id===f.motoristaId);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-100">{tituloInicial?"Abrir Contestação":"Novo Ticket de Acareação"}</h3>
+        <Input label="Título" placeholder="Ex: Avaria em mercadoria — CTE 1234567" value={f.titulo} onChange={e=>sf("titulo",e.target.value)}/>
+        <div>
+          <label className="text-xs text-slate-400 font-medium block mb-1">Agregado</label>
+          <select value={f.motoristaId} onChange={e=>{sf("motoristaId",e.target.value);sf("nomeAgregado",motoristas.find(m=>m.id===e.target.value)?.nome||"");}}
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500">
+            <option value="">Selecione o agregado...</option>
+            {motoristas.filter(m=>m.ativo).map(m=><option key={m.id} value={m.id}>{m.nome} — Mat. {m.matricula}</option>)}
+          </select>
+          {mot?.telefone&&<p className="text-xs text-emerald-400/70 mt-1">📱 {mot.telefone}</p>}
+        </div>
+        <Input label="Valor do Prejuízo (R$)" type="number" step="0.01" placeholder="0,00" value={f.valor} onChange={e=>sf("valor",e.target.value)}/>
+        <div>
+          <label className="text-xs text-slate-400 font-medium block mb-1">Prazo máximo para resposta</label>
+          <input type="date" value={f.prazoData} min={new Date().toISOString().slice(0,10)}
+            onChange={e=>sf("prazoData",e.target.value)}
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+          <p className="text-xs text-slate-500 mt-1">Sem resposta até esta data → valor debitado automaticamente.</p>
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 font-medium block mb-1">Descrição / Observações</label>
+          <textarea value={f.descricao} onChange={e=>sf("descricao",e.target.value)} rows={3} placeholder="Detalhe o ocorrido..."
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500 resize-none"/>
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 font-medium block mb-2">Evidência (PDF / imagem)</label>
+          {f.pdfNome ? (
+            <div className="flex items-center justify-between bg-slate-900 rounded-lg px-3 py-2 border border-slate-700">
+              <p className="text-sm text-emerald-400">📎 {f.pdfNome}</p>
+              <button onClick={()=>{sf("pdfNome","");sf("pdfData",null);}} className="text-slate-500 hover:text-red-400 text-xs">Remover</button>
+            </div>
+          ) : (
+            <button onClick={()=>fileRef.current?.click()}
+              className="w-full border border-dashed border-slate-600 rounded-lg p-4 text-sm text-slate-400 hover:border-slate-400 hover:text-slate-300 transition-all">
+              📎 Anexar PDF ou imagem como evidência
+            </button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handlePDF}/>
+        </div>
+        <div className="flex gap-3 pt-1">
+          <Btn className="flex-1 justify-center" disabled={!f.titulo||!f.motoristaId||!f.valor||!f.prazoData}
+            onClick={()=>onSave({...f,valor:Number(f.valor)})}>Abrir Ticket</Btn>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function TicketDetalheWrapper({ ticket, user, motoristas, onBack, onUpd, onDel, onWhats, onWord, onNewTicket }) {
+  const [showContest, setShowContest] = useState(false);
+  return (
+    <div>
+      <TicketDetalhe ticket={ticket} user={user} motoristas={motoristas}
+        onBack={onBack} onUpd={onUpd} onDel={onDel} onWhats={onWhats} onWord={onWord}
+        onContestar={()=>setShowContest(true)}/>
+      {showContest&&<NovoTicketModal motoristas={motoristas}
+        tituloInicial={"[CONTESTAÇÃO] "+ticket.titulo}
+        onClose={()=>setShowContest(false)}
+        onSave={t=>{ onNewTicket(t); setShowContest(false); }}/>}
+    </div>
+  );
+}
+
+function TicketDetalhe({ ticket, user, motoristas, onBack, onUpd, onDel, onWhats, onWord, onContestar }) {
+  const fileRef   = useRef();
+  const camRef    = useRef();
+  const mot       = motoristas.find(m=>m.id===ticket.motoristaId);
+  const st        = TICKET_STATUS[ticket.status]||TICKET_STATUS.aberto;
+  const code      = "#"+ticket.id.slice(-6).toUpperCase();
+  const canEdit   = user.role!=="auditor";
+
+  const handleResposta = async e => {
+    const file = e.target.files?.[0]; if(!file) return;
+    const r    = new FileReader();
+    r.onload   = ev => onUpd({ status:"respondido", respostaNome:file.name, respostaData:ev.target.result, respondidoEm:now() });
+    r.readAsDataURL(file);
+  };
+
+  return (
+    <div className="p-6 space-y-5 max-w-2xl">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><ArrowLeft size={18}/></button>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-mono text-slate-500">{code}</span>
+            <h1 className="text-lg font-bold text-slate-100">{ticket.titulo}</h1>
+            <Badge color={st.cor}>{st.label}</Badge>
+          </div>
+          <p className="text-xs text-slate-400">{mot?.nome||ticket.nomeAgregado} · Aberto em {ticket.criadoEm?.slice(0,10)} por {ticket.criadoNome}</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onWord}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-400 border border-blue-500/30 hover:bg-blue-500/10">
+            📄 Word
+          </button>
+          {canEdit&&ticket.status!=="encerrado"&&(
+          <div className="flex gap-2">
+            {ticket.status==="aberto"&&(
+              <button onClick={onWhats}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10">
+                📱 Notificar WhatsApp
+              </button>
+            )}
+            {(ticket.status==="respondido")&&(
+              <>
+                <button onClick={()=>onUpd({status:"encerrado",encerradoEm:now()})}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10">
+                  ✓ Encerrar
+                </button>
+                <button onClick={onContestar}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-purple-400 border border-purple-500/30 hover:bg-purple-500/10">
+                  ↺ Contestar
+                </button>
+              </>
+            )}
+            {ticket.status==="aguardando"&&(
+              <button onClick={()=>onUpd({status:"debitado",debitadoEm:now()})}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-red-400 border border-red-500/30 hover:bg-red-500/10">
+                ⚡ Debitar Agora
+              </button>
+            )}
+          </div>
+        )}
+        </div>
+      </div>
+
+      {/* Info cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="p-3 text-center"><p className="text-xs text-slate-500 mb-1">Valor do Prejuízo</p><p className="text-lg font-bold text-red-400">R$ {(ticket.valor||0).toFixed(2).replace(".",",")}</p></Card>
+        <Card className="p-3 text-center"><p className="text-xs text-slate-500 mb-1">Prazo máximo</p>
+          <p className="text-sm font-bold text-amber-400">{ticket.prazoData||(String(ticket.slaDias||5)+"d úteis")}</p></Card>
+        <Card className="p-3 text-center"><p className="text-xs text-slate-500 mb-1">Agregado</p><p className="text-sm font-bold text-slate-200 truncate">{mot?.nome||ticket.nomeAgregado}</p></Card>
+        <Card className="p-3 text-center"><p className="text-xs text-slate-500 mb-1">Status</p><p className="text-sm font-bold" style={{color:st.cor}}>{st.label}</p></Card>
+      </div>
+
+      {/* Description */}
+      {ticket.descricao&&(
+        <Card className="p-4">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Descrição</p>
+          <p className="text-sm text-slate-300 whitespace-pre-wrap">{ticket.descricao}</p>
+        </Card>
+      )}
+
+      {/* Evidence PDF */}
+      {ticket.pdfNome&&(
+        <Card className="p-4">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Evidência Anexada</p>
+          <a href={ticket.pdfData} download={ticket.pdfNome} target="_blank" rel="noreferrer"
+            className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg border border-slate-700 hover:border-slate-500 transition-all">
+            <span className="text-2xl">📎</span>
+            <span className="text-sm text-blue-400 font-semibold">{ticket.pdfNome}</span>
+            <span className="text-xs text-slate-500 ml-auto">Clique para baixar</span>
+          </a>
+        </Card>
+      )}
+
+      {/* Response from aggregate */}
+      <Card className="p-4">
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Resposta do Agregado</p>
+        {ticket.respostaNome ? (
+          <div className="space-y-3">
+            <a href={ticket.respostaData} download={ticket.respostaNome} target="_blank" rel="noreferrer"
+              className="flex items-center gap-3 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30 hover:border-emerald-500/50 transition-all">
+              <span className="text-2xl">✅</span>
+              <div>
+                <p className="text-sm text-emerald-400 font-semibold">{ticket.respostaNome}</p>
+                <p className="text-xs text-slate-400">Respondido em {ticket.respondidoEm?.slice(0,16).replace("T"," ")}</p>
+              </div>
+            </a>
+            {ticket.obs&&<p className="text-xs text-slate-400 italic">"{ticket.obs}"</p>}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="border border-dashed border-slate-700 rounded-lg p-4 text-center text-sm text-slate-500">
+              {ticket.status==="aguardando"?"Aguardando resposta do agregado...":"Nenhuma resposta ainda."}
+            </div>
+            {/* Operator can add response on behalf */}
+            {canEdit&&ticket.status!=="encerrado"&&ticket.status!=="debitado"&&(
+              <div>
+                <p className="text-xs text-slate-500 mb-2">Ou anexe a resposta manualmente:</p>
+                <div className="flex gap-2">
+                  <button onClick={()=>fileRef.current?.click()}
+                    className="flex-1 py-2 rounded-lg border border-slate-700 text-xs text-slate-400 hover:border-slate-500 hover:text-slate-300 transition-all">
+                    📎 Anexar arquivo
+                  </button>
+                  <button onClick={()=>camRef.current?.click()}
+                    className="flex-1 py-2 rounded-lg border border-slate-700 text-xs text-slate-400 hover:border-slate-500 hover:text-slate-300 transition-all">
+                    📷 Tirar foto
+                  </button>
+                </div>
+                <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleResposta}/>
+                <input ref={camRef}  type="file" accept="image/*" capture="environment" className="hidden" onChange={handleResposta}/>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Debit info */}
+      {ticket.status==="debitado"&&(
+        <Card className="p-4 border border-red-500/30 bg-red-500/5">
+          <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">⚡ Valor Debitado do Agregado</p>
+          <p className="text-2xl font-black text-red-400">-R$ {(ticket.valor||0).toFixed(2).replace(".",",")}</p>
+          <p className="text-xs text-slate-400 mt-1">Debitado em {ticket.debitadoEm?.slice(0,16).replace("T"," ")}</p>
+          {ticket.obs&&<p className="text-xs text-red-400/70 mt-1">{ticket.obs}</p>}
+        </Card>
+      )}
+
+      {canEdit&&ticket.status!=="encerrado"&&(
+        <div className="flex justify-end">
+          <button onClick={onDel} className="text-xs text-slate-600 hover:text-red-400 flex items-center gap-1"><Trash2 size={12}/>Excluir ticket</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DreFechamento({ fechamentos, motoristas, dreEntradas, setDreEntradas, fixedCosts, costEntries, faturamentosJadlog, acrescimos }) {
   const [filtMes,  setFiltMes]  = useState(new Date().getMonth()+1);
   const [filtAno,  setFiltAno]  = useState(new Date().getFullYear());
@@ -4781,7 +5336,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
         return cteDatas.some(d => {
           // CTE date format is DD/MM/YYYY — normalize to YYYY-MM-DD for comparison
           const parts = d.split("/");
-          const iso = parts.length === 3 ? `${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}` : d.slice(0,10);
+          const iso = parts.length === 3 ? parts[2]+"-"+parts[1].padStart(2,"0")+"-"+parts[0].padStart(2,"0") : d.slice(0,10);
           if (fDtIni && iso < fDtIni) return false;
           if (fDtFim && iso > fDtFim) return false;
           return true;
@@ -4833,14 +5388,14 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-100">Fechamento de Entregas</h1>
-          <p className="text-sm text-slate-400">{fechamentos.length} fechamento(s){hasFilter ? ` · ${fechamentosFiltrados.length} filtrado(s)` : ""}</p>
+          <p className="text-sm text-slate-400">{fechamentos.length} fechamento(s){hasFilter ? " · "+(fechamentosFiltrados.length)+" filtrado(s)" : ""}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {userHasFechamento(user) && (
             <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
               {[["lista","📋 Fechamentos"],["mots","🚚 Motoristas"],...(userHasDRE(user)?[["dre","📊 DRE"]]:[])].map(([v,l])=>(
                 <button key={v} onClick={()=>setSubView(v)}
-                  className={`px-3 py-1.5 font-semibold transition-all ${subView===v?"bg-red-600 text-white":"bg-slate-800 text-slate-400 hover:text-slate-200"}`}>{l}</button>
+                  className={"px-3 py-1.5 font-semibold transition-all "+(subView===v?"bg-red-600 text-white":"bg-slate-800 text-slate-400 hover:text-slate-200")+""}>{l}</button>
               ))}
             </div>
           )}
@@ -4859,7 +5414,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
           <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
             {Object.entries(FS).map(([k, v]) => (
               <button key={k} onClick={() => setFStatus(fStatus === k ? "" : k)}
-                className={`rounded-lg p-2.5 text-center border transition-all ${fStatus === k ? "border-2" : "bg-slate-800 border-slate-700 hover:border-slate-500"}`}
+                className={"rounded-lg p-2.5 text-center border transition-all "+(fStatus === k ? "border-2" : "bg-slate-800 border-slate-700 hover:border-slate-500")+""}
                 style={fStatus === k ? { borderColor: v.cor, background: v.cor + "15" } : {}}>
                 <p className="text-lg font-bold" style={{ color: v.cor }}>{fechamentos.filter(f => f.status === k).length}</p>
                 <p className="text-xs text-slate-500 mt-0.5 leading-tight">{v.label}</p>
@@ -4985,13 +5540,15 @@ function PortalAcesso({ fechamentos, motoristas, onEnterPortal, onSair }) {
   const [err, setErr] = useState("");
 
   const handleEnter = () => {
-    const t = token.trim().toUpperCase();
+    const t = token.trim();
     if (!t) return;
-    // Find motorista by codigoAcesso
-    const mot = motoristas.find(m => m.codigoAcesso === t && m.ativo);
-    if (!mot) { setErr("Código inválido. Verifique o código recebido."); return; }
-    setErr("");
-    onEnterPortal(mot.matricula); // pass matricula as identifier
+    // Try matricula first (simpler access)
+    const motByMat = motoristas.find(m => m.matricula === t && m.ativo);
+    if (motByMat) { setErr(""); onEnterPortal(motByMat.matricula); return; }
+    // Try legacy codigoAcesso
+    const motByCod = motoristas.find(m => m.codigoAcesso === t.toUpperCase() && m.ativo);
+    if (motByCod) { setErr(""); onEnterPortal(motByCod.matricula); return; }
+    setErr("Matrícula ou código inválido.");
   };
 
   return (
@@ -5002,10 +5559,10 @@ function PortalAcesso({ fechamentos, motoristas, onEnterPortal, onSair }) {
             <Truck size={16} className="text-blue-400" /><span className="text-red-400 text-sm font-semibold">Portal do Agregado</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-100 mb-1">Fechamento de Entrega</h1>
-          <p className="text-slate-400 text-sm">Insira o código recebido para visualizar e assinar seu fechamento</p>
+          <p className="text-slate-400 text-sm">Digite sua <strong>matrícula</strong> para acessar o portal</p>
         </div>
         <Card className="p-6 space-y-4">
-          <Input label="Código de Acesso" placeholder="Cole aqui o código recebido..."
+          <Input label="Matrícula" placeholder="Digite sua matrícula (ex: 134994)"
             value={token} onChange={e => setToken(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleEnter()} />
           {err && <p className="text-red-400 text-sm">{err}</p>}
@@ -5021,7 +5578,7 @@ function PortalAcesso({ fechamentos, motoristas, onEnterPortal, onSair }) {
   );
 }
 
-function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamentos, onSair }) {
+function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamentos, tickets, setTickets, onSair }) {
   const [selectedFecId, setSelectedFecId] = useState(null);
   const [aprovarStep, setAprovarStep] = useState(null);
   const [motivo, setMotivo] = useState("");
@@ -5067,7 +5624,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
       const anyAgr  = mots.some(c => c.etapa === "agr");
       const status  = allPago ? "pago" : anyRevOp ? "op" : anyAgr ? "agr" : f.status;
       const hist = [...f.hist, {
-        acao: patch.statusAgr === "aprovado" ? `Agregado aceitou — ${mCad?.nome||motMatricula}` : `Agregado CONTESTOU — ${mCad?.nome||motMatricula}`,
+        acao: patch.statusAgr === "aprovado" ? "Agregado aceitou — "+(mCad?.nome||motMatricula)+"" : "Agregado CONTESTOU — "+(mCad?.nome||motMatricula)+"",
         quem: mCad?.nome||motMatricula, ts: now(), obs: patch.comentarioAgr||""
       }];
       return { ...f, mots, status, hist };
@@ -5084,7 +5641,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
   const handleEvidencia = async e => {
     const files = Array.from(e.target.files||[]);
     const novos = await Promise.all(files.map(async f=>{
-      if(f.size>8*1024*1024){alert(`${f.name} muito grande. Máx 8MB.`);return null;}
+      if(f.size>8*1024*1024){alert(""+(f.name)+" muito grande. Máx 8MB.");return null;}
       const data=await readFileAsBase64(f);
       return {id:uid(),nome:f.name,tipo:f.type,data};
     }));
@@ -5195,8 +5752,8 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
                   <div className="flex justify-between"><span className="text-slate-400">CTEs planilha</span><span className="text-slate-200">{mot.totalCTEs}</span></div>
                   <div className="flex justify-between"><span className="text-emerald-400">Entregas (evento=entrega)</span><span className="text-emerald-400">{mot.totalCTEs} CTEs entregues</span></div>
                   {mot.vDiaria>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.diasUnicos||1} dia(s) × {fmt(mot.valorDiaria)}</span><span className="text-amber-400">{fmt(mot.vDiaria)}</span></div>}
-                  {mot.vPacotes>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.tipo==="diaria_excedente"?`Excedente: ${mot.excedente} pcts × ${fmt(mot.valorPacote)}`:`${mot.totalPacotes} × ${fmt(mot.valorPacote)}`}</span><span className="text-emerald-400">{fmt(mot.vPacotes)}</span></div>}
-                  {mot.correcoes?.map(cr=><div key={cr.id} className="flex justify-between items-start gap-2"><span className="text-blue-400 flex-1">CTE {cr.ncte}{cr.data?` (${cr.data})`:""} — {cr.justificativa}</span><span className={`font-bold text-xs px-1.5 py-0.5 rounded whitespace-nowrap ${cr.valor>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400"}`}>{cr.valor>=0?"+ ":"- "}{fmt(Math.abs(cr.valor))} {cr.valor>=0?"(Acréscimo)":"(Débito)"}</span></div>)}
+                  {mot.vPacotes>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.tipo==="diaria_excedente"?"Excedente: "+(mot.excedente)+" pcts × "+(fmt(mot.valorPacote))+"":""+(mot.totalPacotes)+" × "+(fmt(mot.valorPacote))+""}</span><span className="text-emerald-400">{fmt(mot.vPacotes)}</span></div>}
+                  {mot.correcoes?.map(cr=><div key={cr.id} className="flex justify-between items-start gap-2"><span className="text-blue-400 flex-1">CTE {cr.ncte}{cr.data?" ("+(cr.data)+")":""} — {cr.justificativa}</span><span className={"font-bold text-xs px-1.5 py-0.5 rounded whitespace-nowrap "+(cr.valor>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400")+""}>{cr.valor>=0?"+ ":"- "}{fmt(Math.abs(cr.valor))} {cr.valor>=0?"(Acréscimo)":"(Débito)"}</span></div>)}
                   <div className="flex justify-between font-bold border-t border-slate-700 pt-1"><span className="text-slate-100">TOTAL</span><span className="text-emerald-400 text-base">{fmt(mot.totalBruto)}</span></div>
                 </div>
 
@@ -5282,7 +5839,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
           {meusFechamentos.map(({ fec, mot }) => {
             const etapaInfo = ETAPA_LABEL[mot.etapa] || ETAPA_LABEL.agr;
             return (
-              <Card key={fec.id} className={`overflow-hidden ${selectedFecId===fec.id?"border-blue-500/40":""}`}>
+              <Card key={fec.id} className={"overflow-hidden "+(selectedFecId===fec.id?"border-blue-500/40":"")+""}>
                 <div className="flex items-start justify-between gap-3 p-4 cursor-pointer hover:bg-slate-700/20 transition-all"
                   onClick={()=>setSelectedFecId(selectedFecId===fec.id?null:fec.id)}>
                   <div className="flex-1 min-w-0">
@@ -5295,15 +5852,15 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
                   <div className="text-right flex-shrink-0">
                     <p className="text-lg font-bold text-emerald-400">{fmt(mot.totalBruto)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{fmtDate(fec.criadoEm)}</p>
-                    <ChevronDown size={14} className={`text-slate-500 mt-1 ml-auto transition-transform ${selectedFecId===fec.id?"rotate-180":""}`}/>
+                    <ChevronDown size={14} className={"text-slate-500 mt-1 ml-auto transition-transform "+(selectedFecId===fec.id?"rotate-180":"")+""}/>
                   </div>
                 </div>
                 {selectedFecId===fec.id&&(
                   <div className="border-t border-slate-700 p-4 space-y-2 text-sm">
                     {mot.vDiaria>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.diasUnicos||1} dia(s) × {fmt(mot.valorDiaria)}</span><span className="text-amber-400 font-semibold">{fmt(mot.vDiaria)}</span></div>}
-                    {mot.vPacotes>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.tipo==="diaria_excedente"?`Excedente: ${mot.excedente} pcts × ${fmt(mot.valorPacote)}`:`${mot.totalPacotes} × ${fmt(mot.valorPacote)}`}</span><span className="text-emerald-400 font-semibold">{fmt(mot.vPacotes)}</span></div>}
+                    {mot.vPacotes>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.tipo==="diaria_excedente"?"Excedente: "+(mot.excedente)+" pcts × "+(fmt(mot.valorPacote))+"":""+(mot.totalPacotes)+" × "+(fmt(mot.valorPacote))+""}</span><span className="text-emerald-400 font-semibold">{fmt(mot.vPacotes)}</span></div>}
                     {mot.correcoes?.length>0&&mot.correcoes.map(cr=>(
-                      <div key={cr.id} className="flex justify-between items-start gap-2"><span className="text-blue-400 text-xs flex-1">CTE {cr.ncte}{cr.data?` (${cr.data})`:""}: {cr.justificativa}</span><span className={`text-xs font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${cr.valor>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400"}`}>{cr.valor>=0?"Acréscimo":"Débito"}: {cr.valor>=0?"+":""}{fmt(cr.valor)}</span></div>
+                      <div key={cr.id} className="flex justify-between items-start gap-2"><span className="text-blue-400 text-xs flex-1">CTE {cr.ncte}{cr.data?" ("+(cr.data)+")":""}: {cr.justificativa}</span><span className={"text-xs font-bold px-1.5 py-0.5 rounded whitespace-nowrap "+(cr.valor>=0?"bg-emerald-500/20 text-emerald-400":"bg-red-500/20 text-red-400")+""}>{cr.valor>=0?"Acréscimo":"Débito"}: {cr.valor>=0?"+":""}{fmt(cr.valor)}</span></div>
                     ))}
                     <div className="flex justify-between font-bold border-t border-slate-700 pt-2"><span className="text-slate-100">Total</span><span className="text-emerald-400">{fmt(mot.totalBruto)}</span></div>
                     {mot.comentarioAgr&&<p className="text-xs text-slate-400 italic mt-1">Seu comentário: "{mot.comentarioAgr}"</p>}
@@ -5425,7 +5982,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
     if (cteDatas.length === 0) return true; // no dates to filter on — include
     return cteDatas.some(d => {
       const parts = d.split("/");
-      const iso = parts.length === 3 ? `${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}` : d.slice(0,10);
+      const iso = parts.length === 3 ? parts[2]+"-"+parts[1].padStart(2,"0")+"-"+parts[0].padStart(2,"0") : d.slice(0,10);
       if (fDtIni && iso < fDtIni) return false;
       if (fDtFim && iso > fDtFim) return false;
       return true;
@@ -5468,7 +6025,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
     setTasks(prev => prev.map(t => t.id !== taskId ? t : {
       ...t, pagamentoConfirmado:true, dataPagamentoTask:now(),
       comprovanteTask:{nome:file.name,tipo:file.type,data},
-      comments:[...(t.comments||[]),{id:uid(),userId:user.id,userName:user.name,text:`Pagamento confirmado — comprovante: ${file.name}`,createdAt:now()}]
+      comments:[...(t.comments||[]),{id:uid(),userId:user.id,userName:user.name,text:"Pagamento confirmado — comprovante: "+(file.name)+"",createdAt:now()}]
     }));
   };
 
@@ -5486,10 +6043,10 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
     });
     motsFin.forEach(({fec,mot}) => rows.push(["Motorista",mot.nome,fec.descricao,fec.periodo,
       mot.totalBruto.toFixed(2).replace(".",","),"—","—",mot.nf?.nome||"—","Aguard. Pagamento"]));
-    const csv = "\uFEFF" + rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
+    const csv = "\uFEFF" + rows.map(r=>r.map(v=>"""+(String(v).replace(/"/g,'""'))+""").join(";")).join("\n");
     const a = document.createElement("a");
     a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-    a.download = `pagamentos_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = "pagamentos_"+(new Date().toISOString().slice(0,10))+".csv";
     document.body.appendChild(a);
     a.click();
     setTimeout(() => document.body.removeChild(a), 100);
@@ -5573,15 +6130,16 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[
-          ["agr",        `🟣 Ciência Agregado${motsAgr.length>0?` (${motsAgr.length})`:""}`,              motsAgr.length>0],
-          ["agregados",  `💰 Pagar${motsFin.length>0?` (${motsFin.length})`:""}`,                        motsFin.length>0],
-          ["contestados",`⚠ Contestados${motsContestados.length>0?` (${motsContestados.length})`:""}`,   motsContestados.length>0],
-          ["internos",   `🔄 Em Revisão${motsInternal.length>0?` (${motsInternal.length})`:""}`,          motsInternal.length>0],
-          ["tarefas",    `📋 Tarefas${tasksPendPag.length>0?` (${tasksPendPag.length})`:""}`,              tasksPendPag.length>0],
-          ["historico",  `✅ Histórico (${motsPago.length+tasksPagas.length})`, false],
+          ["agr",        "🟣 Ciência Agregado${motsAgr.length>0?" (${motsAgr.length})`:""}`,              motsAgr.length>0],
+          ["agregados",  "💰 Pagar${motsFin.length>0?" (${motsFin.length})`:""}`,                        motsFin.length>0],
+          ["contestados","⚠ Contestados${motsContestados.length>0?" (${motsContestados.length})`:""}`,   motsContestados.length>0],
+          ["internos",   "🔄 Em Revisão${motsInternal.length>0?" (${motsInternal.length})`:""}`,          motsInternal.length>0],
+          ["tarefas",    "📋 Tarefas${tasksPendPag.length>0?" (${tasksPendPag.length})`:""}`,              tasksPendPag.length>0],
+          ["historico",  "✅ Histórico ("+(motsPago.length+tasksPagas.length)+")", false],
+          ["acareacao",  "⚠ Acareações${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0?" (${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length})`:""}`,  (tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0],
         ].map(([v,l,hasPend])=>(
           <button key={v} onClick={()=>setTab(v)}
-            className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all relative ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}>
+            className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all relative "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500")+""}>
             {l}{hasPend&&tab!==v&&<span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full"/>}
           </button>
         ))}
@@ -5752,7 +6310,78 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
         </div>
       )}
 
-      {tab === "historico" && (
+      {tab === "acareacao" && (
+        <div className="space-y-3">
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 text-sm text-amber-300">
+            <p className="font-bold mb-1">⚠ Tickets de Acareação</p>
+            <p className="text-xs text-amber-400/70">Você deve responder dentro do prazo. Caso contrário, o valor será debitado automaticamente.</p>
+          </div>
+          {(tickets||[]).filter(t=>t.motoristaId===mCad?.id).length===0&&(
+            <p className="text-slate-500 text-sm text-center py-6">Nenhum ticket de acareação.</p>
+          )}
+          {(tickets||[]).filter(t=>t.motoristaId===mCad?.id).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm)).map(t=>{
+            const st     = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+            const camRef = {current:null};
+            const fileRef= {current:null};
+            const handleResposta = e => {
+              const file=e.target.files?.[0]; if(!file) return;
+              const r=new FileReader();
+              r.onload=ev=>setTickets(p=>p.map(x=>x.id===t.id?{...x,status:"respondido",respostaNome:file.name,respostaData:ev.target.result,respondidoEm:new Date().toISOString()}:x));
+              r.readAsDataURL(file);
+            };
+            return (
+              <Card key={t.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-slate-500">#{t.id.slice(-6).toUpperCase()}</span>
+                      <p className="font-bold text-slate-100 text-sm">{t.titulo}</p>
+                      <Badge color={st.cor}>{st.label}</Badge>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Aberto em {t.criadoEm?.slice(0,10)} · Prazo: {t.slaDias||SLA_DIAS_TICKET} dias úteis</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs text-slate-500">Valor</p>
+                    <p className="text-lg font-bold text-red-400">R$ {(t.valor||0).toFixed(2).replace(".",",")}</p>
+                  </div>
+                </div>
+                {t.descricao&&<p className="text-xs text-slate-400 bg-slate-900 rounded-lg p-3">{t.descricao}</p>}
+                {t.pdfNome&&(
+                  <a href={t.pdfData} download={t.pdfNome} target="_blank" rel="noreferrer"
+                    className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300">
+                    📎 {t.pdfNome}
+                  </a>
+                )}
+                {t.status==="aguardando"&&!t.respostaNome&&(
+                  <div className="pt-2 border-t border-slate-700">
+                    <p className="text-xs font-bold text-amber-400 mb-2">Responder — Tire uma foto ou envie um arquivo</p>
+                    <div className="flex gap-2">
+                      <label className="flex-1 py-3 rounded-xl border border-slate-700 text-xs text-center text-slate-400 hover:border-amber-500/50 hover:text-amber-400 cursor-pointer transition-all">
+                        📷 Tirar Foto
+                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleResposta}/>
+                      </label>
+                      <label className="flex-1 py-3 rounded-xl border border-slate-700 text-xs text-center text-slate-400 hover:border-blue-500/50 hover:text-blue-400 cursor-pointer transition-all">
+                        📎 Enviar Arquivo
+                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleResposta}/>
+                      </label>
+                    </div>
+                  </div>
+                )}
+                {t.respostaNome&&(
+                  <div className="flex items-center gap-2 bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20 text-xs text-emerald-400">
+                    ✅ Respondido em {t.respondidoEm?.slice(0,10)} · {t.respostaNome}
+                  </div>
+                )}
+                {t.status==="debitado"&&(
+                  <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20 text-xs text-red-400">
+                    ⚡ Valor debitado: R$ {(t.valor||0).toFixed(2).replace(".",",")}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
         <div className="space-y-4">
           {(() => {
             const pagosFiltrados = motsPago.filter(({fec,mot}) => matchesMot(mot) && matchesDate(mot));
@@ -5771,7 +6400,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
           {pagosFiltrados.length>0&&(
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Motoristas Pagos ({pagosFiltrados.length}{hasFilter&&motsPago.length!==pagosFiltrados.length?` de ${motsPago.length}`:""})</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Motoristas Pagos ({pagosFiltrados.length}{hasFilter&&motsPago.length!==pagosFiltrados.length?" de "+(motsPago.length)+"":""})</h3>
               </div>
               {pagosFiltrados.map(({fec,mot})=>{
                 const isOpen = expandHist === mot.id;
@@ -5789,7 +6418,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <p className="text-lg font-bold text-emerald-400">{fmt(mot.totalBruto)}</p>
-                        <ChevronDown size={15} className={`text-slate-400 transition-transform ${isOpen?"rotate-180":""}`}/>
+                        <ChevronDown size={15} className={"text-slate-400 transition-transform "+(isOpen?"rotate-180":"")+""}/>
                       </div>
                     </div>
                     {isOpen&&(
@@ -5799,7 +6428,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
                           {mot.vDiaria>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.diasUnicos||1} dia(s) × {fmt(mot.valorDiaria)}</span><span className="text-amber-400 font-semibold">{fmt(mot.vDiaria)}</span></div>}
                           {mot.vPacotes>0&&<div className="flex justify-between"><span className="text-slate-400">{mot.totalPacotes} pcts × {fmt(mot.valorPacote)}</span><span className="text-emerald-400 font-semibold">{fmt(mot.vPacotes)}</span></div>}
                           {mot.correcoes?.map(cr=>(
-                            <div key={cr.id} className="flex justify-between"><span className={`text-xs ${cr.valor>=0?"text-emerald-400":"text-red-400"}`}>{cr.valor>=0?"Acréscimo":"Débito"} CTE {cr.ncte}</span><span className={`font-semibold text-xs ${cr.valor>=0?"text-emerald-400":"text-red-400"}`}>{cr.valor>=0?"+":""}{fmt(cr.valor)}</span></div>
+                            <div key={cr.id} className="flex justify-between"><span className={"text-xs "+(cr.valor>=0?"text-emerald-400":"text-red-400")+""}>{cr.valor>=0?"Acréscimo":"Débito"} CTE {cr.ncte}</span><span className={"font-semibold text-xs "+(cr.valor>=0?"text-emerald-400":"text-red-400")+""}>{cr.valor>=0?"+":""}{fmt(cr.valor)}</span></div>
                           ))}
                           <div className="flex justify-between border-t border-slate-700 pt-1 font-bold"><span className="text-slate-100">Total</span><span className="text-emerald-400">{fmt(mot.totalBruto)}</span></div>
                         </div>
@@ -5852,11 +6481,11 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
                           <span className="text-xs text-slate-500">{t.templateName}</span>
                         </div>
                         <p className="font-semibold text-slate-100">{t.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Pago em {fmtDate(t.dataPagamentoTask)}{opener?` · ${opener.name}`:""}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Pago em {fmtDate(t.dataPagamentoTask)}{opener?" · "+(opener.name)+"":""}</p>
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <p className="text-lg font-bold text-emerald-400">{fmt(total)}</p>
-                        <ChevronDown size={15} className={`text-slate-400 transition-transform ${isOpen?"rotate-180":""}`}/>
+                        <ChevronDown size={15} className={"text-slate-400 transition-transform "+(isOpen?"rotate-180":"")+""}/>
                       </div>
                     </div>
                     {isOpen&&(
@@ -5871,7 +6500,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
                         {/* Rateio */}
                         {t.clientAllocation?.length>0&&(
                           <div className="text-xs text-slate-400">
-                            Rateio: {t.clientAllocation.map(a=>`${clients.find(c=>c.id===a.clientId)?.name||a.clientId} ${a.percent}%`).join(" · ")}
+                            Rateio: {t.clientAllocation.map(a=>""+(clients.find(c=>c.id===a.clientId)?.name||a.clientId)+" "+(a.percent)+"%").join(" · ")}
                           </div>
                         )}
                         {/* Comprovante */}
@@ -5934,7 +6563,7 @@ function MotoristasBulkImportBtn({ setMotoristas }) {
         };
         const nome = get("nome")||get("name");
         const mat  = get("matricula")||get("matrícula")||get("matricula");
-        if (!nome||!mat) { errors.push(`Linha ${i+2}: nome ou matrícula vazios`); return; }
+        if (!nome||!mat) { errors.push("Linha "+(i+2)+": nome ou matrícula vazios"); return; }
         const tipo = get("tipopagamento")||get("tipo")||"ambos";
         newMots.push({
           id: uid(), nome, matricula: mat, cpf: get("cpf")||"", email: get("email")||"",
@@ -5944,7 +6573,7 @@ function MotoristasBulkImportBtn({ setMotoristas }) {
           valorCTE: parseFloat(get("valorcte")||get("valorpacote")||"0")||0,
           valorPacote: parseFloat(get("valorcte")||get("valorpacote")||"0")||0,
           ativo: true,
-          codigoAcesso: `AGR-${nome.split(" ").map(p=>p[0]).join("").slice(0,3).toUpperCase()}-${Math.floor(1000+Math.random()*9000)}`
+          codigoAcesso: "AGR-"+(nome.split(" ").map(p=>p[0]).join("").slice(0,3).toUpperCase())+"-"+(Math.floor(1000+Math.random()*9000))+""
         });
         added++;
       });
@@ -5961,7 +6590,7 @@ function MotoristasBulkImportBtn({ setMotoristas }) {
       <Btn size="sm" onClick={()=>ref.current?.click()}><Upload size={13}/>Importar Motoristas</Btn>
       <input ref={ref} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile}/>
       {result&&(
-        <span className="text-xs text-emerald-400">{result.added} importado(s){result.errors.length>0?` | ${result.errors.length} erro(s)`:""}</span>
+        <span className="text-xs text-emerald-400">{result.added} importado(s){result.errors.length>0?" | "+(result.errors.length)+" erro(s)":""}</span>
       )}
     </div>
   );
@@ -6051,7 +6680,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
       // Store as one import batch
       const batch = { id:uid(), importadoEm:now(), arquivo:file.name, unidadeId, unidadeNome:unidadeInfo.nome, rows };
       setFaturamentos(p=>[...p, batch]);
-      setImportMsg(`✅ ${rows.length} CTEs importados | Unidade: ${unidadeInfo.nome||"—"}`);
+      setImportMsg("✅ "+(rows.length)+" CTEs importados | Unidade: "+(unidadeInfo.nome||"—")+"");
     } catch(err) {
       setImportMsg("❌ Erro: " + err.message);
     }
@@ -6093,7 +6722,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
   filteredRows.forEach(r=>{
     const cl = matchClient(r.cnpj);
     const k  = cl ? cl.id : r.cnpj;
-    const nm = cl ? cl.code||cl.name : `CNPJ ${r.cnpj}`;
+    const nm = cl ? cl.code||cl.name : "CNPJ "+(r.cnpj)+"";
     if (!byClient[k]) byClient[k] = {nome:nm, fat:0, com:0, ctes:0, matched:!!cl};
     byClient[k].fat  += r.fatBruto;
     byClient[k].com  += r.comissao;
@@ -6103,7 +6732,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
   // By quinzena/mes
   const byPeriod = {};
   filteredRows.forEach(r=>{
-    const k = `${r.ano}/${String(r.mes).padStart(2,"0")} Q${r.quinz}`;
+    const k = ""+(r.ano)+"/"+(String(r.mes).padStart(2,"0"))+" Q"+(r.quinz)+"";
     if (!byPeriod[k]) byPeriod[k] = {label:k, fat:0, com:0, ctes:0};
     byPeriod[k].fat  += r.fatBruto;
     byPeriod[k].com  += r.comissao;
@@ -6125,7 +6754,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
           <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport}/>
         </div>
       </div>
-      {importMsg&&<div className={`text-xs px-3 py-2 rounded-lg border ${importMsg.startsWith("✅")?"bg-emerald-500/10 border-emerald-500/30 text-emerald-300":"bg-red-500/10 border-red-500/30 text-red-300"}`}>{importMsg}</div>}
+      {importMsg&&<div className={"text-xs px-3 py-2 rounded-lg border "+(importMsg.startsWith("✅")?"bg-emerald-500/10 border-emerald-500/30 text-emerald-300":"bg-red-500/10 border-red-500/30 text-red-300")+""}>{importMsg}</div>}
 
       {/* Filtros */}
       <div className="flex gap-3 flex-wrap items-center">
@@ -6151,7 +6780,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
       <div className="flex gap-2 flex-wrap">
         {[["dashboard","📊 Dashboard"],["clientes","🤝 Por Cliente"],["periodo","📅 Por Período"],["unidades","🏢 Unidades"],["ctes","📋 CTEs"]].map(([v,l])=>(
           <button key={v} onClick={()=>setTab(v)}
-            className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700"}`}>{l}</button>
+            className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")+""}>{l}</button>
         ))}
       </div>
 
@@ -6162,7 +6791,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
             <KpiCard compact label="CTEs" value={totalCTEs.toLocaleString("pt-BR")} icon={BarChart2} color="#60a5fa"/>
             <KpiCard compact label="Faturamento" value={fmt(totalFat)} sub="zFrapConrrent" icon={Wallet} color="#10b981"/>
             <KpiCard compact label="Comissão" value={fmt(totalCom)} sub="Liquido" icon={DollarSign} color="#f59e0b"/>
-            <KpiCard compact label="Margem" value={`${margem.toFixed(1)}%`} sub="Comissão/Fat" icon={TrendingUp} color={margem>10?"#10b981":"#ef4444"}/>
+            <KpiCard compact label="Margem" value={""+(margem.toFixed(1))+"%"} sub="Comissão/Fat" icon={TrendingUp} color={margem>10?"#10b981":"#ef4444"}/>
             <KpiCard compact label="Frete Médio/CTE" value={fmt(freteMedio)} sub="Fat÷CTEs" icon={Truck} color="#8b5cf6"/>
           </div>
           {/* Bar chart por período */}
@@ -6173,8 +6802,8 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
                 <BarChart data={Object.values(byPeriod).sort((a,b)=>a.label.localeCompare(b.label))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
                   <XAxis dataKey="label" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}}/>
-                  <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
-                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>`R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:2})}`}/>
+                  <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>""+((v/1000).toFixed(0))+"k"}/>
+                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>"R$ "+(v.toLocaleString("pt-BR",{minimumFractionDigits:2)+")}"}/>
                   <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
                   <Bar dataKey="fat" name="Faturamento" fill="#10b981" radius={[4,4,0,0]}/>
                   <Bar dataKey="com" name="Comissão" fill="#f59e0b" radius={[4,4,0,0]}/>
@@ -6197,7 +6826,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
               <Card key={k} className="p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${c.matched?"bg-emerald-400":"bg-amber-400"}`}/>
+                    <div className={"w-2 h-2 rounded-full "+(c.matched?"bg-emerald-400":"bg-amber-400")+""}/>
                     <div>
                       <p className="font-semibold text-slate-100 text-sm">{c.nome}</p>
                       <p className="text-xs text-slate-500">{c.ctes.toLocaleString()} CTEs{!c.matched?" · CNPJ sem cadastro":""}</p>
@@ -6206,7 +6835,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
                   <div className="flex gap-5 text-right">
                     <div><p className="text-xs text-slate-500">Faturamento</p><p className="text-sm font-bold text-emerald-400">{fmt(c.fat)}</p></div>
                     <div><p className="text-xs text-slate-500">Comissão</p><p className="text-sm font-bold text-amber-400">{fmt(c.com)}</p></div>
-                    <div><p className="text-xs text-slate-500">Margem</p><p className={`text-sm font-bold ${m>10?"text-emerald-400":"text-red-400"}`}>{m.toFixed(1)}%</p></div>
+                    <div><p className="text-xs text-slate-500">Margem</p><p className={"text-sm font-bold "+(m>10?"text-emerald-400":"text-red-400")+""}>{m.toFixed(1)}%</p></div>
                     <div><p className="text-xs text-slate-500">Frete Médio</p><p className="text-sm font-bold text-slate-300">{fmt(c.fat/c.ctes)}</p></div>
                   </div>
                 </div>
@@ -6228,7 +6857,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
                   <div className="flex gap-5 text-right">
                     <div><p className="text-xs text-slate-500">Faturamento</p><p className="text-sm font-bold text-emerald-400">{fmt(p.fat)}</p></div>
                     <div><p className="text-xs text-slate-500">Comissão</p><p className="text-sm font-bold text-amber-400">{fmt(p.com)}</p></div>
-                    <div><p className="text-xs text-slate-500">Margem</p><p className={`text-sm font-bold ${m>10?"text-emerald-400":"text-red-400"}`}>{m.toFixed(1)}%</p></div>
+                    <div><p className="text-xs text-slate-500">Margem</p><p className={"text-sm font-bold "+(m>10?"text-emerald-400":"text-red-400")+""}>{m.toFixed(1)}%</p></div>
                     <div><p className="text-xs text-slate-500">Frete Médio</p><p className="text-sm font-bold text-slate-300">{fmt(p.fat/p.ctes)}</p></div>
                   </div>
                 </div>
@@ -6854,7 +7483,7 @@ function MobView({ user, mobBases, setMobBases, mobAprovado, setMobAprovado, mob
           <input ref={fileRefAprov} type="file" accept=".xlsx,.xls" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)importAprovado(f);}}/>
         </div>
       </div>
-      {importMsg&&<div className={`text-xs px-3 py-2 rounded-lg border ${importMsg.startsWith("✅")?"bg-emerald-500/10 border-emerald-500/30 text-emerald-300":"bg-red-500/10 border-red-500/30 text-red-300"}`}>{importMsg}</div>}
+      {importMsg&&<div className={"text-xs px-3 py-2 rounded-lg border "+(importMsg.startsWith("✅")?"bg-emerald-500/10 border-emerald-500/30 text-emerald-300":"bg-red-500/10 border-red-500/30 text-red-300")+""}>{importMsg}</div>}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -7138,7 +7767,7 @@ export default function OpsControl() {
       document.head.appendChild(s);
     }
     if(!localStorage.getItem("ops3_init_v4")){
-      Object.entries(SEED).forEach(([k,v])=>localStorage.setItem(`ops3_${k}`,JSON.stringify(v)));
+      Object.entries(SEED).forEach(([k,v])=>localStorage.setItem("ops3_"+(k)+"",JSON.stringify(v)));
       localStorage.setItem("ops3_init","1");
       localStorage.setItem("ops3_init_v4","1");
     }
@@ -7188,7 +7817,7 @@ export default function OpsControl() {
             const match = SEED.motoristas.find(s=>s.matricula===m.matricula);
             if(match) return {...m, codigoAcesso: match.codigoAcesso};
             const init = m.nome.trim().split(" ").slice(0,3).map(w=>w[0]?.toUpperCase()||"X").join("").padEnd(3,"X");
-            return {...m, codigoAcesso:`AGR-${init}-${m.matricula.slice(-4)}`};
+            return {...m, codigoAcesso:"AGR-"+(init)+"-"+(m.matricula.slice(-4))+""};
           });
           localStorage.setItem("ops3_motoristas", JSON.stringify(migrated));
         }
@@ -7214,7 +7843,7 @@ export default function OpsControl() {
   const [unidades, setUnidades] = useLS("unidades", SEED.unidades);
   const [faturamentosJadlog, setFaturamentosJadlog] = useLS("faturamentosJadlog", SEED.faturamentosJadlog);
   const [acrescimos, setAcrescimos] = useLS("acrescimos", []);
-  const [mobBases, setMobBases] = useLS("mobBases", []);
+  const [tickets, setTickets] = useLS("tickets", []);
   const [mobAprovado, setMobAprovado] = useLS("mobAprovado", []);
   const [mobCustos, setMobCustos] = useLS("mobCustos", []);       // custos por terceirizada
   const [dreEntradas, setDreEntradas] = useLS("dreEntradas", []); // lançamentos por quinzena
@@ -7235,7 +7864,7 @@ export default function OpsControl() {
       const isFeriado = (d) => {
         const dd = String(d.getDate()).padStart(2,"0");
         const mm = String(d.getMonth()+1).padStart(2,"0");
-        return FERIADOS_FIXOS.has(`${dd}/${mm}`);
+        return FERIADOS_FIXOS.has(""+(dd)+"/"+(mm)+"");
       };
 
       // Start counting from the NEXT day after startedAt
@@ -7274,7 +7903,7 @@ export default function OpsControl() {
           if (diasPassados < slaLimite) return task;
 
           // SLA breached — apply action
-          const obs = `SLA de ${slaLimite} dia(s) útil(eis) ultrapassado (${diasPassados}d). Ação automática: ${step.slaAcao}.`;
+          const obs = "SLA de "+(slaLimite)+" dia(s) útil(eis) ultrapassado ("+(diasPassados)+"d). Ação automática: "+(step.slaAcao)+".";
 
           if (step.slaAcao === "auto_aprovar") {
             // Auto advance
@@ -7334,6 +7963,8 @@ export default function OpsControl() {
       motoristas={motoristas}
       fechamentos={fechamentos}
       setFechamentos={setFechamentos}
+      tickets={tickets}
+      setTickets={setTickets}
       onSair={sairPortal}
     />
   );
@@ -7375,6 +8006,7 @@ export default function OpsControl() {
         {view==="revenue"&&hasF&&<RevenueView user={liveUser} acrescimos={acrescimos} setAcrescimos={setAcrescimos} clients={clients} faturamentosJadlog={faturamentosJadlog}/>}
         {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos} forecastEntries={forecastEntries}/>}
         {view==="forecast"&&hasF&&<ForecastView clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
+        {view==="atendimento"&&<AtendimentoView user={liveUser} tickets={tickets} setTickets={setTickets} motoristas={motoristas} users={users}/>}
         {view==="fechamento"&&<FechamentoView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} motoristas={motoristas} setMotoristas={setMotoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
         {view==="mob"&&<MobView user={liveUser} mobBases={mobBases} setMobBases={setMobBases} mobAprovado={mobAprovado} setMobAprovado={setMobAprovado} mobCustos={mobCustos} setMobCustos={setMobCustos}/>}
         {view==="fatjadlog"&&hasF&&<FatJadlogView user={liveUser} faturamentos={faturamentosJadlog} setFaturamentos={setFaturamentosJadlog} unidades={unidades} setUnidades={setUnidades} clients={clients}/>}
