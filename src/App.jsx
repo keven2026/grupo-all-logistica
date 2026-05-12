@@ -1260,8 +1260,8 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
         ["director","area_manager","operator"].includes(u.role)
       );
       notifyUsers(toNotify,
-        "[Grupo All] Tarefa: "+(task.title)+" — Etapa "+(next+1)+": "+(ns.name)+"",
-        "A tarefa ""+(task.title)+"" avançou para a etapa ""+(ns.name)+"".\n\nAcesse o sistema para tomar ação: "+(window.location.href)+""
+        `[Grupo All] Tarefa: ${task.title} — Etapa ${next+1}: ${ns.name}`,
+        `A tarefa "${task.title}" avançou para a etapa "${ns.name}".\n\nAcesse o sistema para tomar ação: ${window.location.href}`
       );
     } catch(e) {}
   };
@@ -1294,7 +1294,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     if (!tpl) return;
     const siteUrl = window.location.origin || window.location.href.split("#")[0];
     const msg = encodeURIComponent(
-      "🚨 URGENTE — Tarefa "+(taskCode)+"\n\n""+(task.title)+""\n\nSua ação é necessária agora!\n\nAcesse: "+(siteUrl)+"\n\nGrupo All Logística"
+      `🚨 URGENTE — Tarefa ${taskCode}\n\n"${task.title}"\n\nSua ação é necessária agora!\n\nAcesse: ${siteUrl}\n\nGrupo All Logística`
     );
     // Find who should be notified: assignee of current step OR area users OR all non-auditors
     const currentStep_ = tpl.steps[task.currentStepIndex];
@@ -1406,7 +1406,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
               {!hasAction&&!showApproval&&(
                 <p className="text-xs text-slate-500 text-center py-2">
                   {task.status==="awaiting_approval"
-                    ?"Aguardando ${currentStep?.approverRole==="director"?"o Diretor":"Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
+                    ?`Aguardando ${currentStep?.approverRole==="director"?"o Diretor":`Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
                     :"Nenhuma ação disponível para o seu perfil nesta etapa."}
                 </p>
               )}
@@ -2997,7 +2997,7 @@ function exportarCSV(fec) {
   ]);
 
   const csv = "\uFEFF" + rows.map(r =>
-    r.map(v => """+(String(v).replace(/"/g,'""'))+""").join(";")
+    r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")
   ).join("\n");
 
   const a = document.createElement("a");
@@ -3421,7 +3421,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: ""+(totais.ctes)+" CTEs · "+(mots.length)+" motoristas · "+(calc.nok?.length||0)+" sem cadastro${dupes.length ? " · ${dupes.length} duplicatas ignoradas` : ""}` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -3993,7 +3993,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       };
     });
     const allPago = mots.every(c => c.etapa === "pago");
-    const obsText = ""+(mot?.nome)+" — "+(fmt(valorFinal))+"${debito > 0 ? " (débito de ${fmt(debito)}: ${motivoAjuste})" : ""} — "+(file.name)+"";
+    const obsText = `${mot?.nome} — ${fmt(valorFinal)}${debito > 0 ? ` (débito de ${fmt(debito)}: ${motivoAjuste})` : ""} — ${file.name}`;
     upd({ mots, status: allPago ? "pago" : fec.status, hist: hist("Motorista pago", obsText) });
   };
 
@@ -4004,7 +4004,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       const extra = nc.reduce((s, x) => s + x.valor, 0);
       return { ...c, correcoes: nc, totalBruto: c.subtotal + extra };
     });
-    upd({ mots, hist: hist("Correção manual", "CTE "+(corr.ncte)+"${corr.data ? " (${corr.data})" : ""} — "+(corr.justificativa)+"") });
+    upd({ mots, hist: hist("Correção manual", `CTE ${corr.ncte}${corr.data ? ` (${corr.data})` : ""} — ${corr.justificativa}`) });
     setShowCorr(null);
   };
 
@@ -4599,45 +4599,6 @@ const sendWhatsApp = t => {
   window.open("https://wa.me/"+(full)+"?text="+(msg)+"","_blank","noopener");
   updTicket(t.id, {status:"aguardando", whatsappEnviadoEm:now()});
 };
-  const alvo = tickets.filter(t => filtStatus === "todos"
-    ? ["aberto","aguardando","respondido"].includes(t.status)
-    : t.status === filtStatus);
-
-  if (!alvo.length) { alert("Nenhum ticket para exportar."); return; }
-
-  const rows = alvo.map(t => {
-    const mot = motoristas.find(m=>m.id===t.motoristaId);
-    const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
-    return `
-      <div class="ticket">
-        <div class="ticket-header">
-          <div>
-            <div class="ticket-code">#${t.id.slice(-6).toUpperCase()}</div>
-            <div class="ticket-title">${t.titulo}</div>
-          </div>
-          <div class="ticket-badge" style="border-color:${st.cor};color:${st.cor}">${st.label}</div>
-        </div>
-        <table class="info-table">
-          <tr><td class="label">Agregado</td><td>${mot?.nome||t.nomeAgregado||"—"} — Mat. ${mot?.matricula||"—"}</td></tr>
-          <tr><td class="label">Valor do Prejuízo</td><td class="valor">R$ ${(t.valor||0).toFixed(2).replace(".",",")}</td></tr>
-          <tr><td class="label">Prazo</td><td>${t.slaDias||SLA_DIAS_TICKET} dias úteis</td></tr>
-          <tr><td class="label">Aberto em</td><td>${t.criadoEm?.slice(0,10)} por ${t.criadoNome}</td></tr>
-          <tr><td class="label">Status</td><td style="color:${st.cor};font-weight:bold">${st.label}</td></tr>
-          ${t.respondidoEm?"<tr><td class="label">Respondido em</td><td>"+(t.respondidoEm?.slice(0,16).replace("T"," "))+"</td></tr>":""}
-          ${t.debitadoEm?"<tr><td class="label">Debitado em</td><td>"+(t.debitadoEm?.slice(0,16).replace("T"," "))+"</td></tr>":""}
-        </table>
-        ${t.descricao?`<div class="section-label">Descrição</div><div class="descricao">${t.descricao}</div>`:""}
-        ${t.obs?`<div class="section-label">Observações</div><div class="descricao">${t.obs}</div>`:""}
-        <div class="assinaturas">
-          <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Operação / ${t.criadoNome}</div></div>
-          <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Agregado / ${mot?.nome||t.nomeAgregado||"—"}</div></div>
-        </div>
-      </div>`;
-  }).join("");
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Tickets de Acareação — Grupo All Logística</title>
-
 function AtendimentoView({ user, tickets, setTickets, motoristas, users }) {
   const [showNew, setShowNew]     = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -6043,7 +6004,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
     });
     motsFin.forEach(({fec,mot}) => rows.push(["Motorista",mot.nome,fec.descricao,fec.periodo,
       mot.totalBruto.toFixed(2).replace(".",","),"—","—",mot.nf?.nome||"—","Aguard. Pagamento"]));
-    const csv = "\uFEFF" + rows.map(r=>r.map(v=>"""+(String(v).replace(/"/g,'""'))+""").join(";")).join("\n");
+    const csv = "\uFEFF" + rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
     const a = document.createElement("a");
     a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
     a.download = "pagamentos_"+(new Date().toISOString().slice(0,10))+".csv";
@@ -6130,13 +6091,13 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[
-          ["agr",        "🟣 Ciência Agregado${motsAgr.length>0?" (${motsAgr.length})`:""}`,              motsAgr.length>0],
-          ["agregados",  "💰 Pagar${motsFin.length>0?" (${motsFin.length})`:""}`,                        motsFin.length>0],
-          ["contestados","⚠ Contestados${motsContestados.length>0?" (${motsContestados.length})`:""}`,   motsContestados.length>0],
-          ["internos",   "🔄 Em Revisão${motsInternal.length>0?" (${motsInternal.length})`:""}`,          motsInternal.length>0],
-          ["tarefas",    "📋 Tarefas${tasksPendPag.length>0?" (${tasksPendPag.length})`:""}`,              tasksPendPag.length>0],
+          ["agr",        `🟣 Ciência Agregado${motsAgr.length>0?` (${motsAgr.length})`:""}`,              motsAgr.length>0],
+          ["agregados",  `💰 Pagar${motsFin.length>0?` (${motsFin.length})`:""}`,                        motsFin.length>0],
+          ["contestados",`⚠ Contestados${motsContestados.length>0?` (${motsContestados.length})`:""}`,   motsContestados.length>0],
+          ["internos",   `🔄 Em Revisão${motsInternal.length>0?` (${motsInternal.length})`:""}`,          motsInternal.length>0],
+          ["tarefas",    `📋 Tarefas${tasksPendPag.length>0?` (${tasksPendPag.length})`:""}`,              tasksPendPag.length>0],
           ["historico",  "✅ Histórico ("+(motsPago.length+tasksPagas.length)+")", false],
-          ["acareacao",  "⚠ Acareações${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0?" (${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length})`:""}`,  (tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0],
+          ["acareacao",  `⚠ Acareações${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0?` (${(tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length})`:""}`,  (tickets||[]).filter(t=>t.motoristaId===mCad?.id&&t.status==="aguardando").length>0],
         ].map(([v,l,hasPend])=>(
           <button key={v} onClick={()=>setTab(v)}
             className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all relative "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500")+""}>
@@ -6803,7 +6764,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
                   <XAxis dataKey="label" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}}/>
                   <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>""+((v/1000).toFixed(0))+"k"}/>
-                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>"R$ "+(v.toLocaleString("pt-BR",{minimumFractionDigits:2)+")}"}/>
+                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>`R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:2})}`}/>
                   <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
                   <Bar dataKey="fat" name="Faturamento" fill="#10b981" radius={[4,4,0,0]}/>
                   <Bar dataKey="com" name="Comissão" fill="#f59e0b" radius={[4,4,0,0]}/>
