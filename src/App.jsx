@@ -1260,10 +1260,8 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
         ["director","area_manager","operator"].includes(u.role)
       );
       notifyUsers(toNotify,
-        `[Grupo All] Tarefa: ${task.title} — Etapa ${next+1}: ${ns.name}`,
-        `A tarefa "${task.title}" avançou para a etapa "${ns.name}".
-
-Acesse o sistema para tomar ação: ${window.location.href}`
+        "[Grupo All] Tarefa: "+(task.title)+" — Etapa "+(next+1)+": "+(ns.name)+"",
+        "A tarefa ""+(task.title)+"" avançou para a etapa ""+(ns.name)+"".\n\nAcesse o sistema para tomar ação: "+(window.location.href)+""
       );
     } catch(e) {}
   };
@@ -1296,15 +1294,7 @@ Acesse o sistema para tomar ação: ${window.location.href}`
     if (!tpl) return;
     const siteUrl = window.location.origin || window.location.href.split("#")[0];
     const msg = encodeURIComponent(
-      `🚨 URGENTE — Tarefa ${taskCode}
-
-"${task.title}"
-
-Sua ação é necessária agora!
-
-Acesse: ${siteUrl}
-
-Grupo All Logística`
+      "🚨 URGENTE — Tarefa "+(taskCode)+"\n\n""+(task.title)+""\n\nSua ação é necessária agora!\n\nAcesse: "+(siteUrl)+"\n\nGrupo All Logística"
     );
     // Find who should be notified: assignee of current step OR area users OR all non-auditors
     const currentStep_ = tpl.steps[task.currentStepIndex];
@@ -1416,7 +1406,7 @@ Grupo All Logística`
               {!hasAction&&!showApproval&&(
                 <p className="text-xs text-slate-500 text-center py-2">
                   {task.status==="awaiting_approval"
-                    ?`Aguardando ${currentStep?.approverRole==="director"?"o Diretor":`Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
+                    ?"Aguardando ${currentStep?.approverRole==="director"?"o Diretor":"Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
                     :"Nenhuma ação disponível para o seu perfil nesta etapa."}
                 </p>
               )}
@@ -3007,7 +2997,7 @@ function exportarCSV(fec) {
   ]);
 
   const csv = "\uFEFF" + rows.map(r =>
-    r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")
+    r.map(v => """+(String(v).replace(/"/g,'""'))+""").join(";")
   ).join("\n");
 
   const a = document.createElement("a");
@@ -3431,7 +3421,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: ""+(totais.ctes)+" CTEs · "+(mots.length)+" motoristas · "+(calc.nok?.length||0)+" sem cadastro${dupes.length ? " · ${dupes.length} duplicatas ignoradas` : ""}` }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -4003,7 +3993,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       };
     });
     const allPago = mots.every(c => c.etapa === "pago");
-    const obsText = `${mot?.nome} — ${fmt(valorFinal)}${debito > 0 ? ` (débito de ${fmt(debito)}: ${motivoAjuste})` : ""} — ${file.name}`;
+    const obsText = ""+(mot?.nome)+" — "+(fmt(valorFinal))+"${debito > 0 ? " (débito de ${fmt(debito)}: ${motivoAjuste})" : ""} — "+(file.name)+"";
     upd({ mots, status: allPago ? "pago" : fec.status, hist: hist("Motorista pago", obsText) });
   };
 
@@ -4014,7 +4004,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       const extra = nc.reduce((s, x) => s + x.valor, 0);
       return { ...c, correcoes: nc, totalBruto: c.subtotal + extra };
     });
-    upd({ mots, hist: hist("Correção manual", `CTE ${corr.ncte}${corr.data ? ` (${corr.data})` : ""} — ${corr.justificativa}`) });
+    upd({ mots, hist: hist("Correção manual", "CTE "+(corr.ncte)+"${corr.data ? " (${corr.data})" : ""} — "+(corr.justificativa)+"") });
     setShowCorr(null);
   };
 
@@ -4498,6 +4488,119 @@ const TICKET_STATUS = {
 
 const SLA_DIAS_TICKET = 5; // dias úteis para o agregado responder
 
+// ── Atendimento helpers ──
+// ── Atendimento helpers (module level) ──────────────────
+const exportarPDF = (tickets, filtStatus, motoristas) => {
+  const alvo = tickets.filter(t => filtStatus === "todos"
+    ? ["aberto","aguardando","respondido","debitado","contestado"].includes(t.status)
+    : t.status === filtStatus);
+  if (!alvo.length) { alert("Nenhum ticket para exportar."); return; }
+  const rows = alvo.map(t => {
+    const mot = (motoristas||[]).find(m=>m.id===t.motoristaId);
+    const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+    const isImg = d => d && d.startsWith("data:image");
+    const evidHTML = t.pdfData ? (isImg(t.pdfData)
+      ? "<div class=\"section-label\">Evidência</div><img src=\""+t.pdfData+"\" style=\"max-width:100%;max-height:280px;border:1px solid #e2e8f0;border-radius:6px\" />"
+      : "<div class=\"section-label\">Evidência</div><p style=\"color:#3b82f6\">📎 "+t.pdfNome+"</p>") : "";
+    const respHTML = t.respostaData ? (isImg(t.respostaData)
+      ? "<div class=\"section-label\">Resposta do Agregado</div><img src=\""+t.respostaData+"\" style=\"max-width:100%;max-height:280px;border:2px solid #10b981;border-radius:6px\" /><p style=\"color:#10b981;font-size:9pt\">"+t.respondidoEm?.slice(0,10)+"</p>"
+      : "<div class=\"section-label\">Resposta</div><p style=\"color:#10b981\">📎 "+t.respostaNome+"</p>") : "";
+    return "<div class=\"ticket\">"+
+      "<div class=\"ticket-header\">"+
+      "<div><div class=\"ticket-code\">#"+t.id.slice(-6).toUpperCase()+"</div>"+
+      "<div class=\"ticket-title\">"+(t.titulo||"")+"</div></div>"+
+      "<div class=\"ticket-badge\" style=\"border-color:"+st.cor+";color:"+st.cor+"\">"+st.label+"</div></div>"+
+      "<table class=\"info-table\">"+
+      "<tr><td class=\"label\">Agregado</td><td>"+((mot?.nome||t.nomeAgregado||"—"))+" — Mat. "+(mot?.matricula||"—")+"</td></tr>"+
+      "<tr><td class=\"label\">Valor</td><td class=\"valor\">R$ "+((t.valor||0).toFixed(2).replace(".",","))+"</td></tr>"+
+      "<tr><td class=\"label\">Prazo</td><td>"+(t.prazoData||(String(t.slaDias||5)+" dias"))+"</td></tr>"+
+      "<tr><td class=\"label\">Aberto em</td><td>"+((t.criadoEm||"").slice(0,10))+" por "+(t.criadoNome||"—")+"</td></tr>"+
+      "<tr><td class=\"label\">Status</td><td style=\"color:"+st.cor+";font-weight:bold\">"+st.label+"</td></tr>"+
+      "</table>"+
+      (t.descricao?"<div class=\"section-label\">Descrição</div><div class=\"descricao\">"+t.descricao+"</div>":"")+
+      evidHTML+respHTML+
+      "<div class=\"assinaturas\">"+
+      "<div class=\"assinatura-box\"><div class=\"linha\"></div><div class=\"assinatura-label\">Operação / "+(t.criadoNome||"—")+"</div></div>"+
+      "<div class=\"assinatura-box\"><div class=\"linha\"></div><div class=\"assinatura-label\">Agregado / "+((mot?.nome||t.nomeAgregado||"—"))+"</div></div>"+
+      "</div></div>";
+  }).join("");
+  const css = "@page{size:A4;margin:20mm 15mm}body{font-family:Arial;font-size:11pt;color:#111;margin:0}" +
+    ".ticket{border:2px solid #1e293b;border-radius:8px;padding:20px;margin-bottom:24px;page-break-inside:avoid}" +
+    ".ticket-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid #e2e8f0;padding-bottom:12px}" +
+    ".ticket-code{font-size:10pt;color:#64748b;font-family:monospace}.ticket-title{font-size:14pt;font-weight:bold;color:#0f172a;margin-top:4px}" +
+    ".ticket-badge{border:2px solid;border-radius:20px;padding:4px 12px;font-size:10pt;font-weight:bold}" +
+    ".info-table{width:100%;border-collapse:collapse;margin-bottom:14px}.info-table td{padding:5px 8px;border-bottom:1px solid #f1f5f9}" +
+    ".label{color:#64748b;font-size:10pt;width:140px;font-weight:600}.valor{font-size:13pt;font-weight:bold;color:#dc2626}" +
+    ".section-label{font-size:9pt;color:#64748b;font-weight:700;text-transform:uppercase;margin:10px 0 4px}" +
+    ".descricao{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;font-size:10.5pt;white-space:pre-wrap}" +
+    ".assinaturas{display:flex;gap:40px;margin-top:28px}.assinatura-box{flex:1;text-align:center}" +
+    ".linha{border-top:1.5px solid #1e293b;margin-bottom:6px}.assinatura-label{font-size:9.5pt;color:#475569}" +
+    ".header-doc{text-align:center;margin-bottom:30px}.header-doc h1{font-size:16pt;color:#0f172a;margin:0}" +
+    ".header-doc p{font-size:10pt;color:#64748b;margin:4px 0 0}";
+  const html = "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Acareações</title><style>"+css+"</style></head><body>"+
+    "<div class=\"header-doc\"><h1>Grupo All Logística — Acareações</h1>"+
+    "<p>Emitido em "+new Date().toLocaleDateString("pt-BR")+" · "+alvo.length+" ticket(s)</p></div>"+
+    rows+"<script>window.onload=function(){window.print();}<\/script></body></html>";
+  const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.target="_blank"; a.rel="noopener";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
+};
+
+const exportarWord = (t, motoristas) => {
+  if (!t) return;
+  const mot = (motoristas||[]).find(m=>m.id===t.motoristaId);
+  const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+  const html = "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\"><head><meta charset=\"UTF-8\">"+
+    "<style>body{font-family:Arial;font-size:11pt;margin:2cm}h1{font-size:16pt;border-bottom:2pt solid #000;padding-bottom:8pt}"+
+    "table{width:100%;border-collapse:collapse}td{padding:6pt 10pt;border-bottom:1pt solid #ddd}"+
+    ".label{color:#666;width:140pt;font-weight:bold}.valor{color:#dc2626;font-size:14pt;font-weight:bold}</style></head><body>"+
+    "<h1>ACAREAÇÃO — #"+t.id.slice(-6).toUpperCase()+"</h1>"+
+    "<p><b>Grupo All Logística</b> — "+new Date().toLocaleDateString("pt-BR")+"</p>"+
+    "<table>"+
+    "<tr><td class=\"label\">Título</td><td>"+(t.titulo||"")+"</td></tr>"+
+    "<tr><td class=\"label\">Agregado</td><td>"+((mot?.nome||t.nomeAgregado||"—"))+" — Mat. "+(mot?.matricula||"—")+"</td></tr>"+
+    "<tr><td class=\"label\">Valor</td><td class=\"valor\">R$ "+((t.valor||0).toFixed(2).replace(".",","))+"</td></tr>"+
+    "<tr><td class=\"label\">Prazo</td><td>"+(t.prazoData||(String(t.slaDias||5)+" dias"))+"</td></tr>"+
+    "<tr><td class=\"label\">Status</td><td>"+st.label+"</td></tr>"+
+    "<tr><td class=\"label\">Aberto em</td><td>"+((t.criadoEm||"").slice(0,10))+" por "+(t.criadoNome||"—")+"</td></tr>"+
+    "</table>"+
+    (t.descricao?"<p><b>Descrição:</b></p><p style=\"white-space:pre-wrap;background:#f8fafc;padding:10pt\">"+t.descricao+"</p>":"")+
+    "<br><br><table style=\"margin-top:60pt\"><tr>"+
+    "<td style=\"width:45%;text-align:center;border-top:1pt solid #000;padding-top:6pt\">Operação / "+(t.criadoNome||"—")+"</td>"+
+    "<td style=\"width:10%\"></td>"+
+    "<td style=\"width:45%;text-align:center;border-top:1pt solid #000;padding-top:6pt\">Agregado / "+((mot?.nome||t.nomeAgregado||"—"))+"</td>"+
+    "</tr></table></body></html>";
+  const blob = new Blob(["\uFEFF"+html], {type:"application/msword"});
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download="Acareacao_"+t.id.slice(-6).toUpperCase()+".doc";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+};
+
+const sendWhatsApp = (t, motoristas, updTicket) => {
+  const mot = (motoristas||[]).find(m=>m.id===t.motoristaId);
+  if (!mot?.telefone) { alert("Motorista sem WhatsApp cadastrado. Cadastre o telefone em Fechamento → Motoristas."); return; }
+  const phone = mot.telefone.replace(/\D/g,"");
+  const full  = phone.startsWith("55")?phone:"55"+phone;
+  const prazo = t.prazoData||("Prazo: "+String(t.slaDias||5)+" dias");
+  const msg   = encodeURIComponent(
+    "⚠ ACAREAÇÃO #"+t.id.slice(-6).toUpperCase()+"\n\n"+
+    "Você recebeu uma notificação de prejuízo.\n"+
+    "Valor: R$ "+(t.valor||0).toFixed(2).replace(".",",")+"\n"+
+    "Prazo: "+prazo+"\n\n"+
+    "Acesse o portal com sua matrícula: "+window.location.origin
+  );
+  const a = document.createElement("a");
+  a.href="https://wa.me/"+full+"?text="+msg;
+  a.target="_blank"; a.rel="noopener";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  if (updTicket) updTicket(t.id, {status:"aguardando", whatsappEnviadoEm:new Date().toISOString()});
+};
+
 function AtendimentoView({ user, tickets, setTickets, motoristas, users }) {
   const [showNew, setShowNew]     = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -4864,7 +4967,7 @@ function TicketDetalhe({ ticket, user, motoristas, onBack, onUpd, onDel, onWhats
 
       {canEdit&&ticket.status!=="encerrado"&&(
         <div className="flex justify-end">
-          <button onClick={onDel} className="text-xs text-slate-600 hover:text-red-400 flex items-center gap-1"><Trash2 size={12}/>Excluir ticket</button>
+          <button onClick={()=>{if(window.confirm("Excluir este ticket?"))onDel();}} className="text-xs text-slate-600 hover:text-red-400 flex items-center gap-1"><Trash2 size={12}/>Excluir ticket</button>
         </div>
       )}
     </div>
@@ -5438,13 +5541,19 @@ function PortalAcesso({ fechamentos, motoristas, onEnterPortal, onSair }) {
   );
 }
 
-function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula }) {
-  const meusTickets = (tickets||[]).filter(t =>
-    (mCad && t.motoristaId === mCad.id) ||
-    t.matricula === motMatricula ||
-    (mCad && t.nomeAgregado && mCad.nome &&
-     t.nomeAgregado.trim().toUpperCase() === mCad.nome.trim().toUpperCase())
-  ).sort((a,b) => (b.criadoEm||"").localeCompare(a.criadoEm||""));
+function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula, motoristas }) {
+  const meusTickets = (tickets||[]).filter(t => {
+    if (mCad && t.motoristaId === mCad.id) return true;
+    if (t.matricula && t.matricula === motMatricula) return true;
+    if (mCad && t.nomeAgregado && mCad.nome &&
+        t.nomeAgregado.trim().toUpperCase() === mCad.nome.trim().toUpperCase()) return true;
+    // Extra fallback: match by any stored identifier
+    if (t.motoristaId && motoristas && motoristas.find) {
+      const m = motoristas.find(x => x.id===t.motoristaId);
+      if (m && m.matricula === motMatricula) return true;
+    }
+    return false;
+  }).sort((a,b) => (b.criadoEm||"").localeCompare(a.criadoEm||""));
 
   const handleResposta = (ticketId, file) => {
     const r = new FileReader();
@@ -5461,7 +5570,10 @@ function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula }) {
         <p className="text-xs text-amber-400/70">Responda dentro do prazo. Sem resposta, o valor é debitado automaticamente.</p>
       </div>
       {meusTickets.length===0&&(
-        <p className="text-slate-500 text-sm text-center py-8">Nenhum ticket de acareação no momento.</p>
+        <div className="text-center py-8">
+          <p className="text-slate-500 text-sm">Nenhum ticket de acareação no momento.</p>
+          <p className="text-xs text-slate-600 mt-2">Total de tickets no sistema: {(tickets||[]).length}</p>
+        </div>
       )}
       {meusTickets.map(t => {
         const st = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
@@ -5997,7 +6109,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
     });
     motsFin.forEach(({fec,mot}) => rows.push(["Motorista",mot.nome,fec.descricao,fec.periodo,
       mot.totalBruto.toFixed(2).replace(".",","),"—","—",mot.nf?.nome||"—","Aguard. Pagamento"]));
-    const csv = "\uFEFF" + rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
+    const csv = "\uFEFF" + rows.map(r=>r.map(v=>"""+(String(v).replace(/"/g,'""'))+""").join(";")).join("\n");
     const a = document.createElement("a");
     a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
     a.download = "pagamentos_"+(new Date().toISOString().slice(0,10))+".csv";
@@ -6264,14 +6376,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
         </div>
       )}
 
-      {tab === "acareacao" && <PortalAcareacaoTab tickets={tickets} setTickets={setTickets} mCad={mCad} motMatricula={motMatricula}/>}
-      {tab === "historico" && (()=>{
-        const pagosFiltrados = motsPago.filter(({mot}) => matchesMot(mot) && matchesDate(mot));
-        const tarefasFiltradas = tasksPagas.filter(t =>
-          (!fMotor.trim() || t.title.toLowerCase().includes(fMotor.trim().toLowerCase())) &&
-          (!fDtIni || (t.dataPagamentoTask||"").slice(0,10) >= fDtIni) &&
-          (!fDtFim || (t.dataPagamentoTask||"").slice(0,10) <= fDtFim)
-        );
+      {tab === "acareacao" && <PortalAcareacaoTab tickets={tickets} setTickets={setTickets} mCad={mCad} motMatricula={motMatricula} motoristas={motoristas}/>}
             return (<>
           {pagosFiltrados.length===0&&tarefasFiltradas.length===0&&(
             <div className="text-center py-12 text-slate-500"><p>{hasFilter?"Nenhum resultado com esses filtros.":"Nenhum pagamento realizado ainda."}</p></div>
@@ -6403,6 +6508,8 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
             </div>
           )}
           </>);})()}
+        </div>
+      )}
     </div>
   );
 }
@@ -6469,7 +6576,7 @@ function MotoristasBulkImportBtn({ setMotoristas }) {
       <Btn size="sm" onClick={()=>ref.current?.click()}><Upload size={13}/>Importar Motoristas</Btn>
       <input ref={ref} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile}/>
       {result&&(
-        <span className="text-xs text-emerald-400">{result.added} importado(s){result.errors.length>0?` | ${result.errors.length} erro(s)`:""}</span>
+        <span className="text-xs text-emerald-400">{result.added} importado(s){result.errors.length>0?" | "+(result.errors.length)+" erro(s)":""}</span>
       )}
     </div>
   );
@@ -6682,7 +6789,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
                   <XAxis dataKey="label" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}}/>
                   <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>""+((v/1000).toFixed(0))+"k"}/>
-                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>`R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:2})}`}/>
+                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>"R$ "+(v.toLocaleString("pt-BR",{minimumFractionDigits:2)+")}"}/>
                   <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
                   <Bar dataKey="fat" name="Faturamento" fill="#10b981" radius={[4,4,0,0]}/>
                   <Bar dataKey="com" name="Comissão" fill="#f59e0b" radius={[4,4,0,0]}/>
@@ -7404,7 +7511,7 @@ function MobView({ user, mobBases, setMobBases, mobAprovado, setMobAprovado, mob
         {[["conferencia","🔍 Conferência"],["divergencias","⚠ Divergências"],["horaextra","⏰ Hora Extra"],["aprovado","📋 Aprovado × Real"],["lancamentos","📄 Lançamentos"]].map(([v,l])=>(
           <button key={v} onClick={()=>setTab(v)}
             className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")}>
-            {l}{v==="divergencias"&&discrepancias.length>0?` (${discrepancias.length})`:""}{v==="horaextra"&&extraTotal>0?` (${extraTotal})`:""}
+            {l}{v==="divergencias"&&discrepancias.length>0?" ("+discrepancias.length+")":""}{v==="horaextra"&&extraTotal>0?" ("+extraTotal+")":""}
           </button>
         ))}
       </div>
