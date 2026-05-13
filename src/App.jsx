@@ -1261,7 +1261,9 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
       );
       notifyUsers(toNotify,
         `[Grupo All] Tarefa: ${task.title} — Etapa ${next+1}: ${ns.name}`,
-        `A tarefa "${task.title}" avançou para a etapa "${ns.name}".\n\nAcesse o sistema para tomar ação: ${window.location.href}`
+        `A tarefa "${task.title}" avançou para a etapa "${ns.name}".
+
+Acesse o sistema para tomar ação: ${window.location.href}`
       );
     } catch(e) {}
   };
@@ -1294,7 +1296,15 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     if (!tpl) return;
     const siteUrl = window.location.origin || window.location.href.split("#")[0];
     const msg = encodeURIComponent(
-      `🚨 URGENTE — Tarefa ${taskCode}\n\n"${task.title}"\n\nSua ação é necessária agora!\n\nAcesse: ${siteUrl}\n\nGrupo All Logística`
+      `🚨 URGENTE — Tarefa ${taskCode}
+
+"${task.title}"
+
+Sua ação é necessária agora!
+
+Acesse: ${siteUrl}
+
+Grupo All Logística`
     );
     // Find who should be notified: assignee of current step OR area users OR all non-auditors
     const currentStep_ = tpl.steps[task.currentStepIndex];
@@ -3421,7 +3431,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""} ` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -4488,117 +4498,6 @@ const TICKET_STATUS = {
 
 const SLA_DIAS_TICKET = 5; // dias úteis para o agregado responder
 
-// ── Atendimento helpers ──
-const exportarPDF = (tickets, filtStatus, motoristas) => {
-  const alvo = tickets.filter(t => filtStatus === "todos"
-    ? ["aberto","aguardando","respondido"].includes(t.status)
-    : t.status === filtStatus);
-
-  if (!alvo.length) { alert("Nenhum ticket para exportar."); return; }
-
-  const rows = alvo.map(t => {
-    const mot = motoristas.find(m=>m.id===t.motoristaId);
-    const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
-    return `<div class="ticket">
-      <div class="ticket-header">
-        <div><div class="ticket-code">#${t.id.slice(-6).toUpperCase()}</div>
-        <div class="ticket-title">${t.titulo||""}</div></div>
-        <div class="ticket-badge" style="border-color:${st.cor};color:${st.cor}">${st.label}</div>
-      </div>
-      <table class="info-table">
-        <tr><td class="label">Agregado</td><td>${mot?.nome||t.nomeAgregado||"—"} — Mat. ${mot?.matricula||"—"}</td></tr>
-        <tr><td class="label">Valor</td><td class="valor">R$ ${(t.valor||0).toFixed(2).replace(".",",")}</td></tr>
-        <tr><td class="label">Prazo</td><td>${t.slaDias||SLA_DIAS_TICKET} dias úteis</td></tr>
-        <tr><td class="label">Aberto em</td><td>${(t.criadoEm||"").slice(0,10)} por ${t.criadoNome||"—"}</td></tr>
-        <tr><td class="label">Status</td><td style="color:${st.cor};font-weight:bold">${st.label}</td></tr>
-      </table>
-      ${t.descricao?`<div class="section-label">Descrição</div><div class="descricao">${t.descricao}</div>`:""}
-      <div class="assinaturas">
-        <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Operação / ${t.criadoNome||"—"}</div></div>
-        <div class="assinatura-box"><div class="linha"></div><div class="assinatura-label">Agregado / ${mot?.nome||t.nomeAgregado||"—"}</div></div>
-      </div>
-    </div>`;
-  }).join("");
-
-  const css = `@page{size:A4;margin:20mm 15mm}body{font-family:Arial;font-size:11pt;color:#111;margin:0}
-    .ticket{border:2px solid #1e293b;border-radius:8px;padding:20px;margin-bottom:24px;page-break-inside:avoid}
-    .ticket-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid #e2e8f0;padding-bottom:12px}
-    .ticket-code{font-size:10pt;color:#64748b;font-family:monospace}.ticket-title{font-size:14pt;font-weight:bold;color:#0f172a;margin-top:4px}
-    .ticket-badge{border:2px solid;border-radius:20px;padding:4px 12px;font-size:10pt;font-weight:bold}
-    .info-table{width:100%;border-collapse:collapse;margin-bottom:14px}.info-table td{padding:5px 8px;border-bottom:1px solid #f1f5f9}
-    .label{color:#64748b;font-size:10pt;width:140px;font-weight:600}.valor{font-size:13pt;font-weight:bold;color:#dc2626}
-    .section-label{font-size:9pt;color:#64748b;font-weight:700;text-transform:uppercase;margin:10px 0 4px}
-    .descricao{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;font-size:10.5pt;white-space:pre-wrap}
-    .assinaturas{display:flex;gap:40px;margin-top:28px}.assinatura-box{flex:1;text-align:center}
-    .linha{border-top:1.5px solid #1e293b;margin-bottom:6px}.assinatura-label{font-size:9.5pt;color:#475569}
-    .header-doc{text-align:center;margin-bottom:30px}.header-doc h1{font-size:16pt;color:#0f172a;margin:0}
-    .header-doc p{font-size:10pt;color:#64748b;margin:4px 0 0}`;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Acareações</title><style>${css}</style></head><body>
-    <div class="header-doc"><h1>Grupo All Logística — Acareações</h1>
-    <p>Emitido em ${new Date().toLocaleDateString("pt-BR")} · ${alvo.length} ticket(s)</p></div>
-    ${rows}<script>window.onload=()=>window.print();</script></body></html>`;
-
-  // Use blob URL instead of window.open to avoid popup blockers
-  const blob = new Blob([html], {type:"text/html;charset=utf-8"});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click();
-  setTimeout(()=>URL.revokeObjectURL(url), 5000);
-};
-
-// Export single ticket as Word (.doc)
-const exportarWord = (t, motoristas) => {
-  if (!t) return;
-  const mot = motoristas.find(m=>m.id===t.motoristaId);
-  const st  = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"><head><meta charset="UTF-8">
-  <style>body{font-family:Arial;font-size:11pt;margin:2cm}h1{font-size:16pt;border-bottom:2pt solid #000;padding-bottom:8pt}
-  table{width:100%;border-collapse:collapse}td{padding:6pt 10pt;border-bottom:1pt solid #ddd}
-  .label{color:#666;width:140pt;font-weight:bold}.valor{color:#dc2626;font-size:14pt;font-weight:bold}
-  .desc{background:#f8fafc;padding:10pt;border:1pt solid #e2e8f0;white-space:pre-wrap}
-  </style></head><body>
-  <h1>ACAREAÇÃO — #${t.id.slice(-6).toUpperCase()}</h1>
-  <p><b>Grupo All Logística</b> — ${new Date().toLocaleDateString("pt-BR")}</p>
-  <table>
-    <tr><td class="label">Título</td><td>${t.titulo||""}</td></tr>
-    <tr><td class="label">Agregado</td><td>${mot?.nome||t.nomeAgregado||"—"} — Mat. ${mot?.matricula||"—"}</td></tr>
-    <tr><td class="label">Valor do Prejuízo</td><td class="valor">R$ ${(t.valor||0).toFixed(2).replace(".",",")}</td></tr>
-    <tr><td class="label">Prazo</td><td>${t.slaDias||SLA_DIAS_TICKET} dias úteis</td></tr>
-    <tr><td class="label">Status</td><td>${st.label}</td></tr>
-    <tr><td class="label">Aberto em</td><td>${(t.criadoEm||"").slice(0,10)} por ${t.criadoNome||"—"}</td></tr>
-  </table>
-  ${t.descricao?`<p><b>Descrição:</b></p><div class="desc">${t.descricao}</div>`:""}
-  <br><br>
-  <table style="margin-top:60pt"><tr>
-    <td style="width:45%;text-align:center;border-top:1pt solid #000;padding-top:6pt">Operação / ${t.criadoNome||"—"}</td>
-    <td style="width:10%"></td>
-    <td style="width:45%;text-align:center;border-top:1pt solid #000;padding-top:6pt">Agregado / ${mot?.nome||t.nomeAgregado||"—"}</td>
-  </tr></table>
-  </body></html>`;
-  const blob = new Blob(["\ufeff"+html],{type:"application/msword"});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href=url; a.download="Acareacao_"+(t.id.slice(-6).toUpperCase())+".doc"; a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),5000);
-};
-
-// Send WhatsApp notification
-const sendWhatsApp = t => {
-  const mot = motoristas.find(m=>m.id===t.motoristaId);
-  if (!mot?.telefone) { alert("Motorista sem WhatsApp cadastrado. Cadastre o telefone em Fechamento → Motoristas."); return; }
-  const phone = mot.telefone.replace(/\D/g,"");
-  const full  = phone.startsWith("55")?phone:"55"+phone;
-  const msg   = encodeURIComponent(
-    "⚠ ACAREAÇÃO #"+(t.id.slice(-6).toUpperCase())+"\n\n"+
-    `Você recebeu uma notificação de prejuízo da Grupo All Logística.\n`+
-    "Valor: R$ "+((t.valor||0).toFixed(2).replace(".",","))+"\n"+
-    "Prazo: "+(t.slaDias||SLA_DIAS_TICKET)+" dias úteis para responder.\n\n"+
-    "Acesse o portal para responder: "+(window.location.origin)+""
-  );
-  window.open("https://wa.me/"+(full)+"?text="+(msg)+"","_blank","noopener");
-  updTicket(t.id, {status:"aguardando", whatsappEnviadoEm:now()});
-};
 function AtendimentoView({ user, tickets, setTickets, motoristas, users }) {
   const [showNew, setShowNew]     = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -5539,6 +5438,100 @@ function PortalAcesso({ fechamentos, motoristas, onEnterPortal, onSair }) {
   );
 }
 
+function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula }) {
+  const meusTickets = (tickets||[]).filter(t =>
+    (mCad && t.motoristaId === mCad.id) ||
+    t.matricula === motMatricula ||
+    (mCad && t.nomeAgregado && mCad.nome &&
+     t.nomeAgregado.trim().toUpperCase() === mCad.nome.trim().toUpperCase())
+  ).sort((a,b) => (b.criadoEm||"").localeCompare(a.criadoEm||""));
+
+  const handleResposta = (ticketId, file) => {
+    const r = new FileReader();
+    r.onload = ev => setTickets(p => p.map(x => x.id===ticketId
+      ? {...x, status:"respondido", respostaNome:file.name, respostaData:ev.target.result, respondidoEm:new Date().toISOString()}
+      : x));
+    r.readAsDataURL(file);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 text-sm text-amber-300">
+        <p className="font-bold mb-1">⚠ Tickets de Acareação</p>
+        <p className="text-xs text-amber-400/70">Responda dentro do prazo. Sem resposta, o valor é debitado automaticamente.</p>
+      </div>
+      {meusTickets.length===0&&(
+        <p className="text-slate-500 text-sm text-center py-8">Nenhum ticket de acareação no momento.</p>
+      )}
+      {meusTickets.map(t => {
+        const st = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
+        const isImg = data => data && data.startsWith("data:image");
+        return (
+          <Card key={t.id} className="p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-mono text-slate-500">#{t.id.slice(-6).toUpperCase()}</span>
+                  <p className="font-bold text-slate-100 text-sm">{t.titulo}</p>
+                  <Badge color={st.cor}>{st.label}</Badge>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Aberto em {(t.criadoEm||"").slice(0,10)} · Prazo: <span className="text-amber-400 font-semibold">{t.prazoData||(String(t.slaDias||5)+" dias")}</span>
+                </p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-xs text-slate-500">Valor em risco</p>
+                <p className="text-xl font-bold text-red-400">R$ {(t.valor||0).toFixed(2).replace(".",",")}</p>
+              </div>
+            </div>
+            {t.descricao&&<p className="text-xs text-slate-300 bg-slate-900 rounded-lg p-3 border border-slate-800">{t.descricao}</p>}
+            {t.pdfData&&(
+              <div className="border border-slate-700 rounded-lg p-3 bg-slate-900">
+                <p className="text-xs font-bold text-slate-400 mb-2">📎 Evidência: {t.pdfNome||"anexo"}</p>
+                {isImg(t.pdfData)
+                  ? <img src={t.pdfData} alt="evidencia" className="max-w-full rounded-lg border border-slate-700" style={{maxHeight:"280px"}}/>
+                  : <a href={t.pdfData} download={t.pdfNome||"evidencia.pdf"} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm hover:bg-blue-500/30 transition-all">
+                      📄 Baixar PDF da Evidência
+                    </a>
+                }
+              </div>
+            )}
+            {t.respostaNome&&(
+              <div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/30 space-y-2">
+                <p className="text-xs font-bold text-emerald-400">✅ Sua resposta foi enviada em {(t.respondidoEm||"").slice(0,10)}</p>
+                {isImg(t.respostaData)&&<img src={t.respostaData} alt="resposta" className="max-w-full rounded-lg" style={{maxHeight:"200px"}}/>}
+              </div>
+            )}
+            {t.status==="debitado"&&(
+              <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/30">
+                <p className="text-xs font-bold text-red-400">⚡ Valor debitado: R$ {(t.valor||0).toFixed(2).replace(".",",")} em {(t.debitadoEm||"").slice(0,10)}</p>
+              </div>
+            )}
+            {(t.status==="aguardando"||t.status==="aberto")&&!t.respostaNome&&(
+              <div className="pt-2 border-t border-slate-700">
+                <p className="text-xs font-bold text-amber-400 mb-2">Responder — Tire uma foto ou envie um arquivo</p>
+                <div className="flex gap-2">
+                  <label className="flex-1 py-3 rounded-xl border border-slate-700 text-xs text-center text-slate-400 hover:border-amber-500/50 hover:text-amber-400 cursor-pointer transition-all">
+                    📷 Tirar Foto
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={e=>{const f=e.target.files?.[0];if(f)handleResposta(t.id,f);}}/>
+                  </label>
+                  <label className="flex-1 py-3 rounded-xl border border-slate-700 text-xs text-center text-slate-400 hover:border-blue-500/50 hover:text-blue-400 cursor-pointer transition-all">
+                    📎 Enviar Arquivo
+                    <input type="file" accept="image/*,.pdf" className="hidden"
+                      onChange={e=>{const f=e.target.files?.[0];if(f)handleResposta(t.id,f);}}/>
+                  </label>
+                </div>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamentos, tickets, setTickets, onSair }) {
   const [selectedFecId, setSelectedFecId] = useState(null);
   const [aprovarStep, setAprovarStep] = useState(null);
@@ -6271,87 +6264,14 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
         </div>
       )}
 
-      {tab === "acareacao" && (
-        <div className="space-y-3">
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 text-sm text-amber-300">
-            <p className="font-bold mb-1">⚠ Tickets de Acareação</p>
-            <p className="text-xs text-amber-400/70">Você deve responder dentro do prazo. Caso contrário, o valor será debitado automaticamente.</p>
-          </div>
-          {(tickets||[]).filter(t=>t.motoristaId===mCad?.id).length===0&&(
-            <p className="text-slate-500 text-sm text-center py-6">Nenhum ticket de acareação.</p>
-          )}
-          {(tickets||[]).filter(t=>t.motoristaId===mCad?.id).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm)).map(t=>{
-            const st     = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
-            const camRef = {current:null};
-            const fileRef= {current:null};
-            const handleResposta = e => {
-              const file=e.target.files?.[0]; if(!file) return;
-              const r=new FileReader();
-              r.onload=ev=>setTickets(p=>p.map(x=>x.id===t.id?{...x,status:"respondido",respostaNome:file.name,respostaData:ev.target.result,respondidoEm:new Date().toISOString()}:x));
-              r.readAsDataURL(file);
-            };
-            return (
-              <Card key={t.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-slate-500">#{t.id.slice(-6).toUpperCase()}</span>
-                      <p className="font-bold text-slate-100 text-sm">{t.titulo}</p>
-                      <Badge color={st.cor}>{st.label}</Badge>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">Aberto em {t.criadoEm?.slice(0,10)} · Prazo: {t.slaDias||SLA_DIAS_TICKET} dias úteis</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-xs text-slate-500">Valor</p>
-                    <p className="text-lg font-bold text-red-400">R$ {(t.valor||0).toFixed(2).replace(".",",")}</p>
-                  </div>
-                </div>
-                {t.descricao&&<p className="text-xs text-slate-400 bg-slate-900 rounded-lg p-3">{t.descricao}</p>}
-                {t.pdfNome&&(
-                  <a href={t.pdfData} download={t.pdfNome} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300">
-                    📎 {t.pdfNome}
-                  </a>
-                )}
-                {t.status==="aguardando"&&!t.respostaNome&&(
-                  <div className="pt-2 border-t border-slate-700">
-                    <p className="text-xs font-bold text-amber-400 mb-2">Responder — Tire uma foto ou envie um arquivo</p>
-                    <div className="flex gap-2">
-                      <label className="flex-1 py-3 rounded-xl border border-slate-700 text-xs text-center text-slate-400 hover:border-amber-500/50 hover:text-amber-400 cursor-pointer transition-all">
-                        📷 Tirar Foto
-                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleResposta}/>
-                      </label>
-                      <label className="flex-1 py-3 rounded-xl border border-slate-700 text-xs text-center text-slate-400 hover:border-blue-500/50 hover:text-blue-400 cursor-pointer transition-all">
-                        📎 Enviar Arquivo
-                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleResposta}/>
-                      </label>
-                    </div>
-                  </div>
-                )}
-                {t.respostaNome&&(
-                  <div className="flex items-center gap-2 bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20 text-xs text-emerald-400">
-                    ✅ Respondido em {t.respondidoEm?.slice(0,10)} · {t.respostaNome}
-                  </div>
-                )}
-                {t.status==="debitado"&&(
-                  <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20 text-xs text-red-400">
-                    ⚡ Valor debitado: R$ {(t.valor||0).toFixed(2).replace(".",",")}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
-        <div className="space-y-4">
-          {(() => {
-            const pagosFiltrados = motsPago.filter(({fec,mot}) => matchesMot(mot) && matchesDate(mot));
-            const tarefasFiltradas = tasksPagas.filter(t => {
-              if (fMotor.trim()) return false;
-              if (fCTE.trim()) return false;
-              // tasks don't have CTEs — skip date filter too (no CTE dates available)
-              return true;
-            });
+      {tab === "acareacao" && <PortalAcareacaoTab tickets={tickets} setTickets={setTickets} mCad={mCad} motMatricula={motMatricula}/>}
+      {tab === "historico" && (()=>{
+        const pagosFiltrados = motsPago.filter(({mot}) => matchesMot(mot) && matchesDate(mot));
+        const tarefasFiltradas = tasksPagas.filter(t =>
+          (!fMotor.trim() || t.title.toLowerCase().includes(fMotor.trim().toLowerCase())) &&
+          (!fDtIni || (t.dataPagamentoTask||"").slice(0,10) >= fDtIni) &&
+          (!fDtFim || (t.dataPagamentoTask||"").slice(0,10) <= fDtFim)
+        );
             return (<>
           {pagosFiltrados.length===0&&tarefasFiltradas.length===0&&(
             <div className="text-center py-12 text-slate-500"><p>{hasFilter?"Nenhum resultado com esses filtros.":"Nenhum pagamento realizado ainda."}</p></div>
@@ -6483,8 +6403,6 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
             </div>
           )}
           </>);})()}
-        </div>
-      )}
     </div>
   );
 }
@@ -6551,7 +6469,7 @@ function MotoristasBulkImportBtn({ setMotoristas }) {
       <Btn size="sm" onClick={()=>ref.current?.click()}><Upload size={13}/>Importar Motoristas</Btn>
       <input ref={ref} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile}/>
       {result&&(
-        <span className="text-xs text-emerald-400">{result.added} importado(s){result.errors.length>0?" | "+(result.errors.length)+" erro(s)":""}</span>
+        <span className="text-xs text-emerald-400">{result.added} importado(s){result.errors.length>0?` | ${result.errors.length} erro(s)`:""}</span>
       )}
     </div>
   );
@@ -7486,7 +7404,7 @@ function MobView({ user, mobBases, setMobBases, mobAprovado, setMobAprovado, mob
         {[["conferencia","🔍 Conferência"],["divergencias","⚠ Divergências"],["horaextra","⏰ Hora Extra"],["aprovado","📋 Aprovado × Real"],["lancamentos","📄 Lançamentos"]].map(([v,l])=>(
           <button key={v} onClick={()=>setTab(v)}
             className={"text-xs px-3 py-1.5 rounded-full font-semibold border transition-all "+(tab===v?"bg-red-600 text-white border-red-600":"bg-slate-800 text-slate-400 border-slate-700")}>
-            {l}{v==="divergencias"&&discrepancias.length>0?" ("+discrepancias.length+")":""}{v==="horaextra"&&extraTotal>0?" ("+extraTotal+")":""}
+            {l}{v==="divergencias"&&discrepancias.length>0?` (${discrepancias.length})`:""}{v==="horaextra"&&extraTotal>0?` (${extraTotal})`:""}
           </button>
         ))}
       </div>
