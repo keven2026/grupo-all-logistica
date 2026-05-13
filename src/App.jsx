@@ -1261,7 +1261,9 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
       );
       notifyUsers(toNotify,
         "[Grupo All] Tarefa: "+(task.title)+" — Etapa "+(next+1)+": "+(ns.name)+"",
-        "A tarefa ""+(task.title)+"" avançou para a etapa ""+(ns.name)+"".\n\nAcesse o sistema para tomar ação: "+(window.location.href)+""
+          `A tarefa "${task.title}" avançou para a etapa "${ns.name}".
+
+Acesse o sistema para tomar ação: ${window.location.href}`
       );
     } catch(e) {}
   };
@@ -1294,7 +1296,15 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     if (!tpl) return;
     const siteUrl = window.location.origin || window.location.href.split("#")[0];
     const msg = encodeURIComponent(
-      "🚨 URGENTE — Tarefa "+(taskCode)+"\n\n""+(task.title)+""\n\nSua ação é necessária agora!\n\nAcesse: "+(siteUrl)+"\n\nGrupo All Logística"
+      `🚨 URGENTE — Tarefa ${taskCode}
+
+"${task.title}"
+
+Sua ação é necessária agora!
+
+Acesse: ${siteUrl}
+
+Grupo All Logística`
     );
     // Find who should be notified: assignee of current step OR area users OR all non-auditors
     const currentStep_ = tpl.steps[task.currentStepIndex];
@@ -1406,7 +1416,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
               {!hasAction&&!showApproval&&(
                 <p className="text-xs text-slate-500 text-center py-2">
                   {task.status==="awaiting_approval"
-                    ?"Aguardando ${currentStep?.approverRole==="director"?"o Diretor":"Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
+                    ?`Aguardando ${currentStep?.approverRole==="director"?"o Diretor":`Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
                     :"Nenhuma ação disponível para o seu perfil nesta etapa."}
                 </p>
               )}
@@ -2997,7 +3007,7 @@ function exportarCSV(fec) {
   ]);
 
   const csv = "\uFEFF" + rows.map(r =>
-    r.map(v => """+(String(v).replace(/"/g,'""'))+""").join(";")
+    r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")
   ).join("\n");
 
   const a = document.createElement("a");
@@ -3421,7 +3431,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: ""+(totais.ctes)+" CTEs · "+(mots.length)+" motoristas · "+(calc.nok?.length||0)+" sem cadastro${dupes.length ? " · ${dupes.length} duplicatas ignoradas` : ""}` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: `${totais.ctes} CTEs · ${mots.length} motoristas · ${calc.nok?.length||0} sem cadastro${dupes.length ? ` · ${dupes.length} duplicatas ignoradas` : ""}` }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -3993,7 +4003,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       };
     });
     const allPago = mots.every(c => c.etapa === "pago");
-    const obsText = ""+(mot?.nome)+" — "+(fmt(valorFinal))+"${debito > 0 ? " (débito de ${fmt(debito)}: ${motivoAjuste})" : ""} — "+(file.name)+"";
+    const obsText = `${mot?.nome} — ${fmt(valorFinal)}${debito > 0 ? ` (débito de ${fmt(debito)}: ${motivoAjuste})` : ""} — ${file.name}`;
     upd({ mots, status: allPago ? "pago" : fec.status, hist: hist("Motorista pago", obsText) });
   };
 
@@ -4004,7 +4014,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       const extra = nc.reduce((s, x) => s + x.valor, 0);
       return { ...c, correcoes: nc, totalBruto: c.subtotal + extra };
     });
-    upd({ mots, hist: hist("Correção manual", "CTE "+(corr.ncte)+"${corr.data ? " (${corr.data})" : ""} — "+(corr.justificativa)+"") });
+      upd({ mots, hist: hist("Correção manual", `CTE ${corr.ncte}${corr.data ? ` (${corr.data})` : ""} — ${corr.justificativa}`) });
     setShowCorr(null);
   };
 
@@ -4540,7 +4550,7 @@ const exportarPDF = (tickets, filtStatus, motoristas) => {
   const html = "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Acareações</title><style>"+css+"</style></head><body>"+
     "<div class=\"header-doc\"><h1>Grupo All Logística — Acareações</h1>"+
     "<p>Emitido em "+new Date().toLocaleDateString("pt-BR")+" · "+alvo.length+" ticket(s)</p></div>"+
-    rows+"<script>window.onload=function(){window.print();}<\/script></body></html>";
+    rows+"\x3cscript\x3ewindow.onload=function(){window.print();}\x3c/script\x3e</body></html>";
   const blob = new Blob([html], {type:"text/html;charset=utf-8"});
   const url  = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -6109,7 +6119,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
     });
     motsFin.forEach(({fec,mot}) => rows.push(["Motorista",mot.nome,fec.descricao,fec.periodo,
       mot.totalBruto.toFixed(2).replace(".",","),"—","—",mot.nf?.nome||"—","Aguard. Pagamento"]));
-    const csv = "\uFEFF" + rows.map(r=>r.map(v=>"""+(String(v).replace(/"/g,'""'))+""").join(";")).join("\n");
+    const csv = "\uFEFF" + rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
     const a = document.createElement("a");
     a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
     a.download = "pagamentos_"+(new Date().toISOString().slice(0,10))+".csv";
@@ -6377,6 +6387,13 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
       )}
 
       {tab === "acareacao" && <PortalAcareacaoTab tickets={tickets} setTickets={setTickets} mCad={mCad} motMatricula={motMatricula} motoristas={motoristas}/>}
+      {tab === "historico" && (()=>{
+        const pagosFiltrados = motsPago.filter(({mot}) => matchesMot(mot) && matchesDate(mot));
+        const tarefasFiltradas = tasksPagas.filter(t =>
+          (!fMotor.trim() || t.title.toLowerCase().includes(fMotor.trim().toLowerCase())) &&
+          (!fDtIni || (t.dataPagamentoTask||"").slice(0,10) >= fDtIni) &&
+          (!fDtFim || (t.dataPagamentoTask||"").slice(0,10) <= fDtFim)
+        );
             return (<>
           {pagosFiltrados.length===0&&tarefasFiltradas.length===0&&(
             <div className="text-center py-12 text-slate-500"><p>{hasFilter?"Nenhum resultado com esses filtros.":"Nenhum pagamento realizado ainda."}</p></div>
@@ -6508,8 +6525,6 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
             </div>
           )}
           </>);})()}
-        </div>
-      )}
     </div>
   );
 }
@@ -6789,7 +6804,7 @@ function FatJadlogView({ user, faturamentos, setFaturamentos, unidades, setUnida
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
                   <XAxis dataKey="label" stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}}/>
                   <YAxis stroke="#64748b" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>""+((v/1000).toFixed(0))+"k"}/>
-                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>"R$ "+(v.toLocaleString("pt-BR",{minimumFractionDigits:2)+")}"}/>
+                  <Tooltip contentStyle={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#f1f5f9"}} formatter={v=>`R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:2})}`}/>
                   <Legend wrapperStyle={{fontSize:11,color:"#94a3b8"}}/>
                   <Bar dataKey="fat" name="Faturamento" fill="#10b981" radius={[4,4,0,0]}/>
                   <Bar dataKey="com" name="Comissão" fill="#f59e0b" radius={[4,4,0,0]}/>
