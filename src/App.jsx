@@ -4264,7 +4264,8 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
 
                   {/* GEST: Saldo de débitos + Aprovar → Financeiro ou Devolver → Op */}
                   {canGestAppr(etapa) && (() => {
-                    const ticketsMotorista = (tickets||[]).filter(t => t.motoristaId === c.id && t.status === "debitado");
+                    const motObj = (tickets||[]).length>0 ? null : null; // lookup by mat
+                    const ticketsMotorista = (tickets||[]).filter(t => { const m=(typeof motoristas!=="undefined"?motoristas:[]).find(x=>x.id===t.motoristaId); return m && m.matricula===c.mat && t.status==="debitado"; });
                     const totalDebitos = ticketsMotorista.reduce((s,t) => s + (t.valor||0), 0);
                     const corrDebitos = (c.correcoes||[]).filter(cr => cr.valor < 0).reduce((s,cr) => s + cr.valor, 0);
                     const saldoTotal = totalDebitos + Math.abs(corrDebitos);
@@ -4305,7 +4306,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
 
                   {/* FIN: Débitos de tickets + Aprovar → Agregado ou Devolver → Gestor */}
                   {canFinAppr(etapa) && (() => {
-                    const ticketsPend = (tickets||[]).filter(t => t.motoristaId === c.id && (t.status==="debitado"||t.status==="aguardando"));
+                    const ticketsPend = (tickets||[]).filter(t => { const m=(typeof motoristas!=="undefined"?motoristas:[]).find(x=>x.id===t.motoristaId); return m && m.matricula===c.mat && (t.status==="debitado"||t.status==="aguardando"); });
                     const jaCorrIds = new Set((c.correcoes||[]).map(cr => cr.ncte));
                     const ticketsNovos = ticketsPend.filter(t => !jaCorrIds.has("TICKET-"+t.id.slice(-6).toUpperCase()));
                     return (
@@ -4671,25 +4672,29 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
     const mot = (motoristas||[]).find(m=>m.id===ticket.motoristaId);
     if (!mot) return;
     const code = "#"+ticket.id.slice(-6).toUpperCase();
-    const debitEntry = { id:uid(), tipo:"debito", ncte:"TICKET-"+ticket.id.slice(-6).toUpperCase(), data:now().slice(0,10), valor:-Math.abs(ticket.valor||0), justificativa:"Débito automático — Ticket "+code+": "+(ticket.titulo||"") };
+    const ncteKey = "TICKET-"+ticket.id.slice(-6).toUpperCase();
+    const debitEntry = { id:uid(), tipo:"debito", ncte:ncteKey, data:now().slice(0,10), valor:-Math.abs(ticket.valor||0), justificativa:"Débito automático — Ticket "+code+": "+(ticket.titulo||"") };
     setFechamentos(prev => {
-      const hoje = new Date();
-      // Find active fechamento for this motorista (current month/quinzena)
-      const fecIdx = prev.findIndex(f => {
-        const mots = f.mots||[];
-        return mots.some(m => m.id===mot.id);
+      // Find most recent open fechamento for this motorista by matricula
+      let bestIdx = -1;
+      prev.forEach((f, idx) => {
+        const motRec = (f.mots||[]).find(m => m.mat === mot.matricula);
+        if (motRec && motRec.etapa !== "pago") {
+          if (bestIdx === -1 || (f.criadoEm||"") > (prev[bestIdx].criadoEm||"")) bestIdx = idx;
+        }
       });
-      if (fecIdx >= 0) {
-        const fec = prev[fecIdx];
-        const newMots = (fec.mots||[]).map(m => {
-          if (m.id !== mot.id) return m;
-          return { ...m, correcoes: [...(m.correcoes||[]), debitEntry] };
-        });
-        const updated = [...prev];
-        updated[fecIdx] = { ...fec, mots: newMots };
-        return updated;
-      }
-      return prev;
+      if (bestIdx < 0) return prev; // no open fechamento found
+      const fec = prev[bestIdx];
+      // Avoid duplicate debit for same ticket
+      const jaLancado = (fec.mots||[]).some(m => m.mat===mot.matricula && (m.correcoes||[]).some(cr=>cr.ncte===ncteKey));
+      if (jaLancado) return prev;
+      const newMots = (fec.mots||[]).map(m => {
+        if (m.mat !== mot.matricula) return m;
+        return { ...m, correcoes: [...(m.correcoes||[]), debitEntry], totalBruto: (m.totalBruto||0) - Math.abs(ticket.valor||0) };
+      });
+      const updated = [...prev];
+      updated[bestIdx] = { ...fec, mots: newMots };
+      return updated;
     });
   };
 
@@ -6336,6 +6341,7 @@ function PainelLinks({ fec, motoristas }) {
 // ABA PAGAMENTOS
 // ═══════════════════════════════════════════════════════
 function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, users, clients, motoristas, tickets, setTickets }) {
+  const mCad = null; // not applicable in gestor view — prevents ReferenceError from nested components
   const [tab, setTab] = useState("agregados");
   const [expandTask, setExpandTask] = useState(null);
   const [expandHist, setExpandHist] = useState(null);
@@ -6698,7 +6704,7 @@ function PagamentosView({ user, fechamentos, setFechamentos, tasks, setTasks, us
         </div>
       )}
 
-      {tab === "acareacao" && <PortalAcareacaoTab tickets={tickets} setTickets={setTickets} mCad={mCad} motMatricula={motMatricula} motoristas={motoristas}/>}
+      {tab === "acareacao" && <PortalAcareacaoTab tickets={tickets} setTickets={setTickets} mCad={null} motMatricula={null} motoristas={motoristas}/>}
       {tab === "pagamentos" && <>
           {pagosFiltrados.length===0&&tarefasFiltradas.length===0&&(
             <div className="text-center py-12 text-slate-500"><p>{hasFilter?"Nenhum resultado com esses filtros.":"Nenhum pagamento realizado ainda."}</p></div>
