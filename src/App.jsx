@@ -3936,7 +3936,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
   const upd = ch => setFechamentos(prev => prev.map(f => f.id === fec.id ? { ...f, ...ch } : f));
   const hist = (acao, obs = "") => [...(fec.hist||[]), { acao, quem: user.name, ts: now(), obs }];
 
-  const total = fec.mots.reduce((s, c) => s + c.totalBruto, 0);
+  const total = (fec.mots||[]).reduce((s, c) => s + (c.totalBruto||0), 0);
   const st = FS[fec.status] || FS.op;
 
   // Per-motorista individual permissions
@@ -4100,9 +4100,9 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
             <Card className="p-4">
               <p className="text-xs font-bold text-slate-400 mb-3">Breakdown do pagamento</p>
               <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-slate-300">Diárias</span><span className="text-amber-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+c.vDiaria,0))}</span></div>
-                <div className="flex justify-between"><span className="text-slate-300">CTEs entregues</span><span className="text-emerald-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+(c.vCTEs||c.vPacotes||0),0))}</span></div>
-                <div className="flex justify-between"><span className="text-slate-300">Correções manuais</span><span className="text-blue-400 font-semibold">{fmt(fec.mots.reduce((s,c)=>s+(c.totalBruto-c.subtotal),0))}</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">Diárias</span><span className="text-amber-400 font-semibold">{fmt((fec.mots||[]).reduce((s,c)=>s+(c.vDiaria||0),0))}</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">CTEs entregues</span><span className="text-emerald-400 font-semibold">{fmt((fec.mots||[]).reduce((s,c)=>s+(c.vCTEs||c.vPacotes||0),0))}</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">Correções manuais</span><span className="text-blue-400 font-semibold">{fmt((fec.mots||[]).reduce((s,c)=>s+((c.totalBruto||0)-(c.subtotal||0)),0))}</span></div>
                 <div className="flex justify-between border-t border-slate-700 pt-1.5 font-bold"><span className="text-slate-100">Total a Pagar</span><span className="text-emerald-400">{fmt(total)}</span></div>
                 {(fec.nok||[]).length>0&&(
                   <div className="flex justify-between border-t border-amber-500/20 pt-1.5">
@@ -4117,7 +4117,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
               {[["pendente","Aguardando","#f59e0b"],["aprovado","Aprovados","#10b981"],["rejeitado","Rejeitados","#ef4444"]].map(([k,l,c]) => (
                 <div key={k} className="flex justify-between text-sm py-1">
                   <span style={{color:c}}>{l}</span>
-                  <span className="font-semibold text-slate-300">{fec.mots.filter(x=>x.statusAgr===k).length}</span>
+                  <span className="font-semibold text-slate-300">{(fec.mots||[]).filter(x=>x.statusAgr===k).length}</span>
                 </div>
               ))}
             </Card>
@@ -5936,22 +5936,96 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
             <p className="text-xs text-slate-500 mt-0.5">{resumo.totalCTEs} CTEs histórico</p>
           </div>
           {(() => {
-            const meusDebitos = meusFechamentos.flatMap(({mot}) =>
-              (mot.correcoes||[]).filter(cr => cr.valor < 0)
+            // Build all debits with period info
+            const todosDebitos = meusFechamentos.flatMap(({fec, mot}) =>
+              (mot.correcoes||[]).filter(cr => cr.valor < 0).map(cr => ({
+                ...cr, periodo: fec.periodo||"", descricao: fec.descricao||""
+              }))
             );
-            const totalDeb = meusDebitos.reduce((s,cr) => s + Math.abs(cr.valor), 0);
             const ticketsDeb = (tickets||[]).filter(t => mCad && t.motoristaId === mCad.id && t.status==="debitado");
-            const totalTicketDeb = ticketsDeb.reduce((s,t) => s + (t.valor||0), 0);
-            const grand = totalDeb + totalTicketDeb;
-            if (grand === 0) return null;
+            const grand = todosDebitos.reduce((s,cr) => s + Math.abs(cr.valor), 0)
+                        + ticketsDeb.reduce((s,t) => s + (t.valor||0), 0);
+            if (grand === 0 && ticketsDeb.length === 0) return null;
+
+            // Group by month
+            const getMonth = (dateStr) => {
+              if (!dateStr) return "Sem data";
+              const d = dateStr.slice(0,7); // YYYY-MM
+              const [y,m] = d.split("-");
+              const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+              return (meses[parseInt(m)-1]||m)+"/"+y;
+            };
+            const getQuinzena = (dateStr) => {
+              if (!dateStr) return "—";
+              const day = parseInt((dateStr||"").slice(8,10));
+              return day <= 15 ? "1ª Quinzena" : "2ª Quinzena";
+            };
+
+            // Group by month > quinzena
+            const byMonth = {};
+            const addEntry = (month, qz, label, valor) => {
+              if (!byMonth[month]) byMonth[month] = {};
+              if (!byMonth[month][qz]) byMonth[month][qz] = [];
+              byMonth[month][qz].push({ label, valor });
+            };
+
+            todosDebitos.forEach(cr => {
+              const month = cr.periodo ? cr.periodo.split(" ")[0]||getMonth(cr.data) : getMonth(cr.data);
+              const qz = cr.periodo ? (cr.periodo.toLowerCase().includes("1ª")||cr.periodo.toLowerCase().includes("1a")||cr.periodo.toLowerCase().includes("quinzena 1") ? "1ª Quinzena" : cr.periodo.toLowerCase().includes("2ª")||cr.periodo.toLowerCase().includes("2a") ? "2ª Quinzena" : getQuinzena(cr.data)) : getQuinzena(cr.data);
+              addEntry(month, qz, cr.justificativa||cr.ncte||"Débito", Math.abs(cr.valor));
+            });
+            ticketsDeb.forEach(t => {
+              const month = getMonth(t.debitadoEm||t.criadoEm);
+              const qz = getQuinzena(t.debitadoEm||t.criadoEm);
+              addEntry(month, qz, "Ticket #"+t.id.slice(-6).toUpperCase()+" — "+(t.titulo||""), t.valor||0);
+            });
+
+            const [showDebitos, setShowDebitos] = React.useState(false);
+
             return (
-              <div className="col-span-2 md:col-span-4 bg-red-500/10 border-2 border-red-500/30 rounded-xl p-4">
-                <p className="text-xs text-red-400/70 mb-1 font-semibold uppercase tracking-wider">⚡ Total de Débitos Aplicados</p>
-                <p className="text-2xl font-black text-red-400">-{fmt(grand)}</p>
-                <div className="flex gap-4 mt-2 flex-wrap">
-                  {totalDeb > 0 && <p className="text-xs text-slate-400">Correções em fechamentos: <span className="text-red-400 font-semibold">-{fmt(totalDeb)}</span></p>}
-                  {totalTicketDeb > 0 && <p className="text-xs text-slate-400">Tickets de acareação: <span className="text-red-400 font-semibold">-{fmt(totalTicketDeb)}</span></p>}
+              <div className="col-span-2 md:col-span-4 bg-red-500/10 border-2 border-red-500/30 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-red-400/70 font-semibold uppercase tracking-wider">⚡ Total de Débitos Aplicados</p>
+                    <p className="text-2xl font-black text-red-400">-{fmt(grand)}</p>
+                  </div>
+                  <button onClick={()=>setShowDebitos(p=>!p)}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10">
+                    {showDebitos ? "Ocultar ▲" : "Ver detalhes ▼"}
+                  </button>
                 </div>
+                {showDebitos && (
+                  <div className="space-y-3 border-t border-red-500/20 pt-3">
+                    {Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0])).map(([month, quinzenas]) => {
+                      const totalMes = Object.values(quinzenas).flat().reduce((s,e)=>s+e.valor,0);
+                      return (
+                        <div key={month}>
+                          <div className="flex justify-between items-center mb-1">
+                            <p className="text-xs font-bold text-slate-300">📅 {month}</p>
+                            <p className="text-xs font-bold text-red-400">-{fmt(totalMes)}</p>
+                          </div>
+                          {Object.entries(quinzenas).sort().map(([qz, entries]) => {
+                            const totalQz = entries.reduce((s,e)=>s+e.valor,0);
+                            return (
+                              <div key={qz} className="ml-3 mb-2">
+                                <div className="flex justify-between items-center mb-1">
+                                  <p className="text-xs text-slate-400 font-semibold">{qz}</p>
+                                  <p className="text-xs text-red-400/80">-{fmt(totalQz)}</p>
+                                </div>
+                                {entries.map((e,i) => (
+                                  <div key={i} className="flex justify-between items-start gap-2 ml-2 py-0.5">
+                                    <p className="text-xs text-slate-500 truncate flex-1">{e.label}</p>
+                                    <p className="text-xs text-red-400 font-semibold whitespace-nowrap">-{fmt(e.valor)}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })()}
