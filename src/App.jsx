@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   LayoutDashboard, ClipboardList, DollarSign, TrendingUp, Settings,
   LogOut, Plus, Check, X, ChevronRight, Clock, CheckCircle2, XCircle,
@@ -1260,8 +1260,8 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
         ["director","area_manager","operator"].includes(u.role)
       );
       notifyUsers(toNotify,
-        "[Grupo All] Tarefa: "+(task.title)+" — Etapa "+(next+1)+": "+(ns.name),
-        "A tarefa \""+( task.title)+"\" avançou para a etapa \""+(ns.name)+"\".\n\nAcesse o sistema para tomar ação: "+(window.location.href)
+        "[Grupo All] Tarefa: "+(task.title)+" — Etapa "+(next+1)+": "+(ns.name)+"",
+        "A tarefa ""+(task.title)+"" avançou para a etapa ""+(ns.name)+"".\n\nAcesse o sistema para tomar ação: "+(window.location.href)+""
       );
     } catch(e) {}
   };
@@ -1294,7 +1294,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
     if (!tpl) return;
     const siteUrl = window.location.origin || window.location.href.split("#")[0];
     const msg = encodeURIComponent(
-      `🚨 URGENTE — Tarefa ${taskCode}\n\n"${task.title}"\n\nSua ação é necessária agora!\n\nAcesse: ${siteUrl}\n\nGrupo All Logística`
+      "🚨 URGENTE — Tarefa "+(taskCode)+"\n\n""+(task.title)+""\n\nSua ação é necessária agora!\n\nAcesse: "+(siteUrl)+"\n\nGrupo All Logística"
     );
     // Find who should be notified: assignee of current step OR area users OR all non-auditors
     const currentStep_ = tpl.steps[task.currentStepIndex];
@@ -1406,7 +1406,7 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
               {!hasAction&&!showApproval&&(
                 <p className="text-xs text-slate-500 text-center py-2">
                   {task.status==="awaiting_approval"
-                    ?`Aguardando ${currentStep?.approverRole==="director"?"o Diretor":`Gestor de ${areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"}`} aprovar.`
+                    ?"Aguardando "+(currentStep?.approverRole==="director"?"o Diretor":"Gestor de "+(areas.find(a=>a.id===currentStep?.areaId)?.name||"Área"))+" aprovar."
                     :"Nenhuma ação disponível para o seu perfil nesta etapa."}
                 </p>
               )}
@@ -2997,7 +2997,7 @@ function exportarCSV(fec) {
   ]);
 
   const csv = "\uFEFF" + rows.map(r =>
-    r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")
+    r.map(v => """+(String(v).replace(/"/g,'""'))+""").join(";")
   ).join("\n");
 
   const a = document.createElement("a");
@@ -3421,7 +3421,7 @@ function NovoFechamentoModal({ motoristas, user, fechamentos, onClose, onSave })
       nok: calc.nok,
       totalFaturadoNok: calc.totalFaturadoNok || 0,
       dupesIgnoradas: dupes.length,
-      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: ""+(totais.ctes)+" CTEs · "+(mots.length)+" motoristas · "+(calc.nok?.length||0)+" sem cadastro${dupes.length ? " · ${dupes.length} duplicatas ignoradas` : ""}` }],
+      hist: [{ acao: "Criado", quem: user.name, ts: now(), obs: (totais.ctes)+" CTEs · "+(mots.length)+" motoristas · "+(calc.nok?.length||0)+" sem cadastro"+(dupes.length?" · "+dupes.length+" duplicatas ignoradas":"") }],
       comprovante: null, dataPagamento: null,
     });
   };
@@ -3993,7 +3993,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       };
     });
     const allPago = mots.every(c => c.etapa === "pago");
-    const obsText = ""+(mot?.nome)+" — "+(fmt(valorFinal))+"${debito > 0 ? " (débito de ${fmt(debito)}: ${motivoAjuste})" : ""} — "+(file.name)+"";
+    const obsText = (mot?.nome||"")+" — "+fmt(valorFinal)+(debito > 0 ? " (débito de "+fmt(debito)+": "+(motivoAjuste||"")+")":"")+" — "+(file.name||"");
     upd({ mots, status: allPago ? "pago" : fec.status, hist: hist("Motorista pago", obsText) });
   };
 
@@ -4004,7 +4004,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, onBack }) { 
       const extra = nc.reduce((s, x) => s + x.valor, 0);
       return { ...c, correcoes: nc, totalBruto: c.subtotal + extra };
     });
-    upd({ mots, hist: hist("Correção manual", "CTE "+(corr.ncte)+"${corr.data ? " (${corr.data})" : ""} — "+(corr.justificativa)+"") });
+    upd({ mots, hist: hist("Correção manual", "CTE "+(corr.ncte)+(corr.data?" ("+corr.data+")":"")+" — "+(corr.justificativa||"")) });
     setShowCorr(null);
   };
 
