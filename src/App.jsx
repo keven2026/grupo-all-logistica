@@ -3934,7 +3934,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
   const compRef = useRef();
 
   const upd = ch => setFechamentos(prev => prev.map(f => f.id === fec.id ? { ...f, ...ch } : f));
-  const hist = (acao, obs = "") => [...fec.hist, { acao, quem: user.name, ts: now(), obs }];
+  const hist = (acao, obs = "") => [...(fec.hist||[]), { acao, quem: user.name, ts: now(), obs }];
 
   const total = fec.mots.reduce((s, c) => s + c.totalBruto, 0);
   const st = FS[fec.status] || FS.op;
@@ -4477,7 +4477,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
       {/* HISTÓRICO */}
       {tab === "hist" && (
         <div className="space-y-2">
-          {[...fec.hist].reverse().map((h, i) => (
+          {[...(fec.hist||[])].reverse().map((h, i) => (
             <div key={i} className="flex gap-3 p-3 bg-slate-900 rounded-lg border border-slate-700">
               <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
               <div>
@@ -4660,6 +4660,7 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
   const [showNew, setShowNew]     = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [filtStatus, setFiltStatus] = useState("todos");
+  const [filtSearch, setFiltSearch] = useState("");
 
   const selected = tickets.find(t=>t.id===selectedId);
 
@@ -4765,6 +4766,12 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
     if (filtStatus!=="todos" && t.status!==filtStatus) return false;
     if (filtDtIni && (t.prazoData||t.criadoEm?.slice(0,10)) < filtDtIni) return false;
     if (filtDtFim && (t.prazoData||t.criadoEm?.slice(0,10)) > filtDtFim) return false;
+    if (filtSearch.trim()) {
+      const q = filtSearch.trim().toLowerCase();
+      const matchTitulo = (t.titulo||"").toLowerCase().includes(q);
+      const matchCTE = (t.cte||"").includes(filtSearch.trim().replace(/[^0-9]/g,""));
+      if (!matchTitulo && !matchCTE) return false;
+    }
     return true;
   });
 
@@ -4791,6 +4798,12 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
 
       {/* Filter */}
       <div className="flex gap-2 flex-wrap items-center">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/>
+          <input value={filtSearch} onChange={e=>setFiltSearch(e.target.value)}
+            placeholder="Buscar título ou CTE..."
+            className="pl-8 pr-3 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-red-500 w-52"/>
+        </div>
         <div className="flex gap-2 flex-wrap">
           {[["todos","Todos"],...Object.entries(TICKET_STATUS).map(([k,v])=>[k,v.label])].map(([k,l])=>(
             <button key={k} onClick={()=>setFiltStatus(k)}
@@ -4827,7 +4840,7 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
                     <Badge color={st.cor}>{st.label}</Badge>
                     {t.status==="aguardando"&&<SLABadge criadoEm={t.criadoEm} slaDias={t.slaDias} prazoData={t.prazoData}/>}
                   </div>
-                  <p className="text-xs text-slate-400 mt-1">{mot?.nome||t.nomeAgregado} · R$ {(t.valor||0).toFixed(2).replace(".",",")} · {t.criadoEm?.slice(0,10)}</p>
+                  <p className="text-xs text-slate-400 mt-1">{mot?.nome||t.nomeAgregado} · {t.cte&&<span className="text-blue-400 font-mono">CTE {t.cte} · </span>}R$ {(t.valor||0).toFixed(2).replace(".",",")} · {t.criadoEm?.slice(0,10)}</p>
                   {t.descricao&&<p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{t.descricao}</p>}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -4856,7 +4869,7 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
 function NovoTicketModal({ motoristas, onClose, onSave, tituloInicial }) {
   const fileRef = useRef();
   const defaultPrazo = new Date(); defaultPrazo.setDate(defaultPrazo.getDate()+5);
-  const [f, setF] = useState({ titulo:tituloInicial||"", descricao:"", motoristaId:"", nomeAgregado:"", matricula:"", valor:"", prazoData:defaultPrazo.toISOString().slice(0,10), status:"aberto", pdfNome:"", pdfData:null });
+  const [f, setF] = useState({ titulo:tituloInicial||"", cte:"", descricao:"", motoristaId:"", nomeAgregado:"", matricula:"", valor:"", prazoData:defaultPrazo.toISOString().slice(0,10), status:"aberto", pdfNome:"", pdfData:null });
   const sf = (k,v) => setF(p=>({...p,[k]:v}));
   const handlePDF = e => {
     const file=e.target.files?.[0]; if(!file) return;
@@ -4867,7 +4880,8 @@ function NovoTicketModal({ motoristas, onClose, onSave, tituloInicial }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
         <h3 className="text-base font-bold text-slate-100">{tituloInicial?"Abrir Contestação":"Novo Ticket de Acareação"}</h3>
-        <Input label="Título" placeholder="Ex: Avaria — CTE 1234567" value={f.titulo} onChange={e=>sf("titulo",e.target.value)}/>
+        <Input label="Título *" placeholder="Ex: Avaria, Extravio, Devolução..." value={f.titulo} onChange={e=>sf("titulo",e.target.value)}/>
+        <Input label="Número do CTE" placeholder="Ex: 1234567" value={f.cte} onChange={e=>sf("cte",e.target.value.replace(/\D/g,""))}/>
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Agregado</label>
           <select value={f.motoristaId}
@@ -4956,7 +4970,10 @@ function TicketDetalhe({ ticket, user, motoristas, onBack, onUpd, onDel, onWhats
             <h1 className="text-lg font-bold text-slate-100">{ticket.titulo}</h1>
             <Badge color={st.cor}>{st.label}</Badge>
           </div>
-          <p className="text-xs text-slate-400">{mot?.nome||ticket.nomeAgregado} · {(ticket.criadoEm||"").slice(0,10)} por {ticket.criadoNome}</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs text-slate-400">{mot?.nome||ticket.nomeAgregado} · {(ticket.criadoEm||"").slice(0,10)} por {ticket.criadoNome}</p>
+            {ticket.cte&&<p className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">📋 CTE {ticket.cte}</p>}
+          </div>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={onWord} className="px-3 py-1.5 rounded-lg text-xs font-bold text-blue-400 border border-blue-500/30 hover:bg-blue-500/10">📄 Word</button>
