@@ -1260,8 +1260,8 @@ function TaskDetail({ task, user, tasks, setTasks, templates, clients, areas, us
         ["director","area_manager","operator"].includes(u.role)
       );
       notifyUsers(toNotify,
-        "[Grupo All] Tarefa: "+(task.title)+" — Etapa "+(next+1)+": "+(ns.name)+"",
-        "A tarefa ""+(task.title)+"" avançou para a etapa ""+(ns.name)+"".\n\nAcesse o sistema para tomar ação: "+(window.location.href)+""
+        `[Grupo All] Tarefa: ${task.title} — Etapa ${next+1}: ${ns.name}`,
+        `A tarefa "${task.title}" avançou para a etapa "${ns.name}".\n\nAcesse o sistema para tomar ação: ${window.location.href}`
       );
     } catch(e) {}
   };
