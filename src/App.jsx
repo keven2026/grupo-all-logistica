@@ -16,7 +16,27 @@ import {
 // UTILS
 // ─────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
-const now = () => new Date().toISOString();
+const now = () => { const d = new Date(); const off = d.getTimezoneOffset()*60000; return new Date(d-off).toISOString().slice(0,-1); };
+
+// Compress image to max 1024px and 65% JPEG quality before storing
+const compressImage = (file, maxPx=1024, quality=0.65) => new Promise(resolve => {
+  if (!file.type.startsWith("image/")) { const r = new FileReader(); r.onload = e => resolve(e.target.result); r.readAsDataURL(file); return; }
+  const img = new Image();
+  const r = new FileReader();
+  r.onload = e => {
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) { if (w > h) { h = Math.round(h*maxPx/w); w = maxPx; } else { w = Math.round(w*maxPx/h); h = maxPx; } }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.src = e.target.result;
+  };
+  r.readAsDataURL(file);
+});
+
 const fmt = v => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(v || 0);
 const fmtDate = d => d ? new Date(d).toLocaleDateString("pt-BR") : "—";
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -1133,7 +1153,7 @@ function TasksView({ user, tasks, setTasks, templates, setTemplates, clients, ar
               placeholder="Buscar por #ID ou título..."
               className="pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-52"
             />
-            {search && <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"><XIcon size={12}/></button>}
+            {search && <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"><X size={12}/></button>}
           </div>
           {user.role==="area_manager"&&<Btn variant="secondary" size="sm" onClick={()=>setShowProposeFlow(true)}><Layers size={13}/>Propor Fluxo</Btn>}
           {user.role!=="auditor"&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Nova Tarefa</Btn>}
@@ -2408,7 +2428,7 @@ function ClientForm({ onSave, onCancel }) {
           <div className="flex gap-2 flex-wrap mt-2">
             {cnpjs.map(c=>(
               <span key={c} className="flex items-center gap-1 text-xs bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-full px-2.5 py-1">
-                {c}<button onClick={()=>removeCnpj(c)} className="hover:text-red-400 ml-1"><XIcon size={11}/></button>
+                {c}<button onClick={()=>removeCnpj(c)} className="hover:text-red-400 ml-1"><X size={11}/></button>
               </span>
             ))}
           </div>
@@ -4276,7 +4296,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
                           <div className="flex justify-between text-xs font-bold border-t border-red-500/20 mt-1 pt-1"><span className="text-red-300">Total</span><span className="text-red-300">-{fmt(grand)}</span></div>
                         </div>}
                         <Btn size="sm" variant="success" onClick={()=>advanceMotTo(c.id,"fin")}><Check size={12}/>Aprovar → Financeiro</Btn>
-                        <Btn size="sm" variant="danger" onClick={()=>{const o=window.prompt?window.prompt("Motivo:"):"";if(o!==null)rejectMotTo(c.id,"op",o||"");}}><XIcon size={12}/>Devolver à Operação</Btn>
+                        <Btn size="sm" variant="danger" onClick={()=>{const o=window.prompt?window.prompt("Motivo:"):"";if(o!==null)rejectMotTo(c.id,"op",o||"");}}><X size={12}/>Devolver à Operação</Btn>
                       </div>
                     );
                   })()}
@@ -4300,7 +4320,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
                           ))}
                         </div>}
                         <Btn size="sm" variant="success" onClick={()=>advanceMotTo(c.id,"agr")}><Check size={12}/>Liberar ao Agregado</Btn>
-                        <Btn size="sm" variant="danger" onClick={()=>{const o=window.prompt?window.prompt("Motivo:"):"";if(o!==null)rejectMotTo(c.id,"gest",o||"");}}><XIcon size={12}/>Devolver ao Gestor</Btn>
+                        <Btn size="sm" variant="danger" onClick={()=>{const o=window.prompt?window.prompt("Motivo:"):"";if(o!==null)rejectMotTo(c.id,"gest",o||"");}}><X size={12}/>Devolver ao Gestor</Btn>
                       </div>
                     );
                   })()}
@@ -4616,7 +4636,7 @@ const sendWhatsApp = (t, motoristas, updTicket) => {
   if (updTicket) updTicket(t.id, {status:"aguardando", whatsappEnviadoEm:new Date().toISOString()});
 };
 
-function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechamentos, setFechamentos }) {
+function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechamentos, setFechamentos, ticketsExcluidos, setTicketsExcluidos }) {
   const [showNew, setShowNew]     = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [filtStatus, setFiltStatus] = useState("todos");
@@ -4650,6 +4670,9 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
   const updTicket = (id,patch) => setTickets(p=>p.map(t=>{
     if(t.id!==id) return t;
     let h=null;
+    // Protect evidence — never overwrite once submitted
+    if(patch.respostaData===null||patch.respostaData==="") delete patch.respostaData;
+    if(patch.status==="respondido"&&t.respostaData){patch={...patch,respostaData:t.respostaData,respostaNome:t.respostaNome};}
     if(patch.status==="debitado"&&t.status!=="debitado"){h={id:uid(),tipo:"debito",texto:"Débito: R$ "+(t.valor||0).toFixed(2).replace(".",",")+(patch.motivoDebito==="extravio"?" (Extravio)":""),autor:user.name,data:now()};setTimeout(()=>criarDebitoFechamento({...t,...patch}),0);}
     else if(patch.status==="encerrado")h={id:uid(),tipo:"encerrado",texto:"Encerrado por "+user.name,autor:user.name,data:now()};
     else if(patch.status==="aguardando"&&patch.whatsappEnviadoEm)h={id:uid(),tipo:"whatsapp",texto:"WhatsApp enviado",autor:user.name,data:now()};
@@ -4657,7 +4680,11 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
     const historico=h?[...(t.historico||[]),h]:(t.historico||[]);
     return {...t,...patch,historico};
   }));
-  const delTicket  = id => setTickets(p=>p.filter(t=>t.id!==id));
+  const delTicket = id => {
+    const t = tickets.find(x=>x.id===id);
+    if(t) setTicketsExcluidos(p=>[...p,{...t,excluidoPor:user.name,excluidoEm:now()}]);
+    setTickets(p=>p.filter(x=>x.id!==id));
+  };
 
   // Check SLA overdue and auto-debit
   const checkSLA = () => {
@@ -4751,6 +4778,44 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
       {/* Ticket list */}
       <div className="space-y-3">
         {visible.length===0&&<p className="text-slate-500 text-sm text-center py-10">Nenhum ticket encontrado.</p>}
+
+      {/* Tickets Excluídos */}
+      {(ticketsExcluidos||[]).length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-300 font-semibold py-2 px-3 bg-slate-900 rounded-lg border border-slate-800 select-none">
+            🗑 Tickets Excluídos ({(ticketsExcluidos||[]).length}) — clique para ver histórico
+          </summary>
+          <div className="mt-2 space-y-2">
+            {[...(ticketsExcluidos||[])].reverse().map(t => {
+              const mot = (motoristas||[]).find(m=>m.id===t.motoristaId);
+              return (
+                <div key={t.id} className="bg-slate-900 border border-slate-700 rounded-xl p-3 opacity-60">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-mono text-slate-600">#{t.id.slice(-6).toUpperCase()}</span>
+                        <span className="text-xs font-bold text-slate-500 line-through">{t.titulo}</span>
+                        {t.cte&&<span className="text-xs text-slate-600 font-mono">CTE {t.cte}</span>}
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">excluído</span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">{mot?.nome||t.nomeAgregado} · R$ {(t.valor||0).toFixed(2).replace(".",",")} · {(t.criadoEm||"").slice(0,10)}</p>
+                      <p className="text-xs text-red-800 mt-1">🗑 Excluído por <b className="text-red-500">{t.excluidoPor}</b> em {(t.excluidoEm||"").slice(0,16).replace("T"," ")}</p>
+                    </div>
+                    {t.respostaNome&&<p className="text-xs text-emerald-700 font-semibold flex-shrink-0">✅ Tinha evidência</p>}
+                  </div>
+                  {(t.historico||[]).length>0&&(
+                    <div className="mt-2 pt-2 border-t border-slate-800">
+                      {[...(t.historico||[])].reverse().slice(0,4).map(h=>(
+                        <p key={h.id} className="text-xs text-slate-600">• {h.texto} — {(h.data||"").slice(0,16).replace("T"," ")} ({h.autor})</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
         {visible.sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm)).map(t=>{
           const mot   = motoristas.find(m=>m.id===t.motoristaId);
           const st    = TICKET_STATUS[t.status]||TICKET_STATUS.aberto;
@@ -5591,11 +5656,14 @@ function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula, motorista
   }).sort((a,b) => (b.criadoEm||"").localeCompare(a.criadoEm||""));
 
   const handleResposta = (ticketId, file) => {
-    const r = new FileReader();
-    r.onload = ev => setTickets(p => p.map(x => x.id===ticketId
-      ? {...x, status:"respondido", respostaNome:file.name, respostaData:ev.target.result, respondidoEm:new Date().toISOString()}
-      : x));
-    r.readAsDataURL(file);
+    compressImage(file).then(dataUrl => {
+      setTickets(p => p.map(x => {
+        if (x.id!==ticketId) return x;
+        if (x.respostaData) return x; // never overwrite existing evidence
+        const h = { id:uid(), tipo:"resposta", texto:"Evidência enviada: "+file.name, autor:mCad?.nome||"Agregado", data:now() };
+        return {...x, status:"respondido", respostaNome:file.name, respostaData:dataUrl, respondidoEm:now(), historico:[...(x.historico||[]), h]};
+      }));
+    });
   };
 
   return (
@@ -6028,7 +6096,17 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
           return false;
         }).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
         const calcDias=prazo=>{if(!prazo)return null;return Math.ceil((new Date(prazo+"T23:59:59")-new Date())/86400000);};
-        const handleEvidencia=(ticketId,file)=>{const r=new FileReader();r.onload=ev=>setTickets(p=>p.map(x=>{if(x.id!==ticketId)return x;const h={id:uid(),tipo:"resposta",texto:"Evidência enviada: "+file.name,autor:mCad?.nome||"Agregado",data:new Date().toISOString()};return{...x,status:"respondido",respostaNome:file.name,respostaData:ev.target.result,respondidoEm:new Date().toISOString(),historico:[...(x.historico||[]),h]};}));r.readAsDataURL(file);};
+        const handleEvidencia=(ticketId,file)=>{
+          compressImage(file).then(dataUrl=>{
+            setTickets(p=>p.map(x=>{
+              if(x.id!==ticketId)return x;
+              // Never overwrite evidence that already exists
+              if(x.respostaData)return x;
+              const h={id:uid(),tipo:"resposta",texto:"Evidência enviada: "+file.name,autor:mCad?.nome||"Agregado",data:now()};
+              return{...x,status:"respondido",respostaNome:file.name,respostaData:dataUrl,respondidoEm:now(),historico:[...(x.historico||[]),h]};
+            }));
+          });
+        };
         const isImg=d=>d&&d.startsWith("data:image");
         if(meusTickets.length===0)return null;
         const pendentes=meusTickets.filter(t=>t.status==="aguardando"||t.status==="aberto");
@@ -7965,6 +8043,7 @@ export default function OpsControl() {
   const [faturamentosJadlog, setFaturamentosJadlog] = useLS("faturamentosJadlog", SEED.faturamentosJadlog);
   const [acrescimos, setAcrescimos] = useLS("acrescimos", []);
   const [tickets, setTickets] = useLS("tickets", []);
+  const [ticketsExcluidos, setTicketsExcluidos] = useLS("ticketsExcluidos", []);
   const [mobAprovado, setMobAprovado] = useLS("mobAprovado", []);
   const [mobCustos, setMobCustos] = useLS("mobCustos", []);       // custos por terceirizada
   const [dreEntradas, setDreEntradas] = useLS("dreEntradas", []); // lançamentos por quinzena
@@ -8127,7 +8206,7 @@ export default function OpsControl() {
         {view==="revenue"&&hasF&&<RevenueView user={liveUser} acrescimos={acrescimos} setAcrescimos={setAcrescimos} clients={clients} faturamentosJadlog={faturamentosJadlog}/>}
         {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos} forecastEntries={forecastEntries}/>}
         {view==="forecast"&&hasF&&<ForecastView clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
-        {view==="atendimento"&&<AtendimentoView user={liveUser} tickets={tickets} setTickets={setTickets} motoristas={motoristas} users={users} fechamentos={fechamentos} setFechamentos={setFechamentos}/>}
+        {view==="atendimento"&&<AtendimentoView user={liveUser} tickets={tickets} setTickets={setTickets} motoristas={motoristas} users={users} fechamentos={fechamentos} setFechamentos={setFechamentos} ticketsExcluidos={ticketsExcluidos} setTicketsExcluidos={setTicketsExcluidos}/>}
         {view==="fechamento"&&<FechamentoView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} motoristas={motoristas} setMotoristas={setMotoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos} tickets={tickets} setTickets={setTickets}/>}
         {view==="mob"&&<MobView user={liveUser} mobBases={mobBases} setMobBases={setMobBases} mobAprovado={mobAprovado} setMobAprovado={setMobAprovado} mobCustos={mobCustos} setMobCustos={setMobCustos}/>}
         {view==="fatjadlog"&&hasF&&<FatJadlogView user={liveUser} faturamentos={faturamentosJadlog} setFaturamentos={setFaturamentosJadlog} unidades={unidades} setUnidades={setUnidades} clients={clients}/>}
