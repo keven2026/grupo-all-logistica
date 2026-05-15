@@ -20,19 +20,30 @@ const now = () => { const d = new Date(); const off = d.getTimezoneOffset()*6000
 
 // Compress image to max 1024px and 65% JPEG quality before storing
 const compressImage = (file, maxPx=1024, quality=0.65) => new Promise(resolve => {
-  if (!file.type.startsWith("image/")) { const r = new FileReader(); r.onload = e => resolve(e.target.result); r.readAsDataURL(file); return; }
-  const img = new Image();
+  const fallback = () => { const r2=new FileReader(); r2.onload=e=>resolve(e.target.result); r2.onerror=()=>resolve(null); r2.readAsDataURL(file); };
+  if (!file || !file.type) { fallback(); return; }
+  if (!file.type.startsWith("image/")) { fallback(); return; }
   const r = new FileReader();
+  r.onerror = fallback;
   r.onload = e => {
-    img.onload = () => {
-      let w = img.width, h = img.height;
-      if (w > maxPx || h > maxPx) { if (w > h) { h = Math.round(h*maxPx/w); w = maxPx; } else { w = Math.round(w*maxPx/h); h = maxPx; } }
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.src = e.target.result;
+    try {
+      const img = new Image();
+      img.onerror = fallback;
+      img.onload = () => {
+        try {
+          let w = img.width, h = img.height;
+          if (w > maxPx || h > maxPx) { if (w > h) { h = Math.round(h*maxPx/w); w = maxPx; } else { w = Math.round(w*maxPx/h); h = maxPx; } }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { resolve(e.target.result); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          const result = canvas.toDataURL("image/jpeg", quality);
+          resolve(result || e.target.result);
+        } catch(_) { resolve(e.target.result); }
+      };
+      img.src = e.target.result;
+    } catch(_) { fallback(); }
   };
   r.readAsDataURL(file);
 });
@@ -4670,9 +4681,8 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
   const updTicket = (id,patch) => setTickets(p=>p.map(t=>{
     if(t.id!==id) return t;
     let h=null;
-    // Protect evidence — never overwrite once submitted
-    if(patch.respostaData===null||patch.respostaData==="") delete patch.respostaData;
-    if(patch.status==="respondido"&&t.respostaData){patch={...patch,respostaData:t.respostaData,respostaNome:t.respostaNome};}
+    // Keep existing evidence if ticket already responded
+    if(t.status==="respondido"&&t.respostaData&&!patch.respostaData){patch={...patch,respostaData:t.respostaData,respostaNome:t.respostaNome};}
     if(patch.status==="debitado"&&t.status!=="debitado"){h={id:uid(),tipo:"debito",texto:"Débito: R$ "+(t.valor||0).toFixed(2).replace(".",",")+(patch.motivoDebito==="extravio"?" (Extravio)":""),autor:user.name,data:now()};setTimeout(()=>criarDebitoFechamento({...t,...patch}),0);}
     else if(patch.status==="encerrado")h={id:uid(),tipo:"encerrado",texto:"Encerrado por "+user.name,autor:user.name,data:now()};
     else if(patch.status==="aguardando"&&patch.whatsappEnviadoEm)h={id:uid(),tipo:"whatsapp",texto:"WhatsApp enviado",autor:user.name,data:now()};
@@ -5659,7 +5669,7 @@ function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula, motorista
     compressImage(file).then(dataUrl => {
       setTickets(p => p.map(x => {
         if (x.id!==ticketId) return x;
-        if (x.respostaData) return x; // never overwrite existing evidence
+        if (x.status==="respondido"&&x.respostaData) return x;
         const h = { id:uid(), tipo:"resposta", texto:"Evidência enviada: "+file.name, autor:mCad?.nome||"Agregado", data:now() };
         return {...x, status:"respondido", respostaNome:file.name, respostaData:dataUrl, respondidoEm:now(), historico:[...(x.historico||[]), h]};
       }));
@@ -6101,7 +6111,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
             setTickets(p=>p.map(x=>{
               if(x.id!==ticketId)return x;
               // Never overwrite evidence that already exists
-              if(x.respostaData)return x;
+              if(x.status==="respondido"&&x.respostaData)return x;
               const h={id:uid(),tipo:"resposta",texto:"Evidência enviada: "+file.name,autor:mCad?.nome||"Agregado",data:now()};
               return{...x,status:"respondido",respostaNome:file.name,respostaData:dataUrl,respondidoEm:now(),historico:[...(x.historico||[]),h]};
             }));
