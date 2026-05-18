@@ -5530,6 +5530,172 @@ function DreFechamento({ fechamentos, motoristas, dreEntradas, setDreEntradas, f
   );
 }
 
+
+// ═══════════════════════════════════════════════════════
+// ANÁLISE DE FECHAMENTOS POR AGREGADO
+// ═══════════════════════════════════════════════════════
+function AnaliseFechamentos({ fechamentos, motoristas }) {
+  const [periodo, setPeriodo] = useState("todos");
+  const [ordenar, setOrdenar] = useState("margem");
+
+  // Build per-motorista summary across all fechamentos
+  const dados = useMemo(() => {
+    const map = {};
+    fechamentos.forEach(fec => {
+      (fec.mots||[]).forEach(mot => {
+        const id = mot.mat || mot.nome;
+        if (!id) return;
+        if (!map[id]) {
+          const cad = motoristas.find(m => m.matricula===mot.mat);
+          map[id] = { id, nome:mot.nome||id, mat:mot.mat||"", cad,
+            pacotes:0, faturado:0, pago:0, qtdFec:0, debitos:0 };
+        }
+        map[id].pacotes   += mot.totalCTEs||0;
+        map[id].faturado  += mot.totalFaturado||0;
+        map[id].pago      += mot.totalBruto||0;
+        map[id].qtdFec    += 1;
+        map[id].debitos   += (mot.correcoes||[]).filter(c=>c.valor<0).reduce((s,c)=>s+Math.abs(c.valor),0);
+      });
+    });
+    return Object.values(map).map(d => ({
+      ...d,
+      margem: d.faturado > 0 ? ((d.faturado - d.pago) / d.faturado) * 100 : 0,
+      lucro: d.faturado - d.pago,
+      cpmedio: d.pacotes > 0 ? d.pago / d.pacotes : 0,
+    }));
+  }, [fechamentos, motoristas]);
+
+  const sorted = [...dados].sort((a,b) => {
+    if (ordenar==="margem")   return b.margem - a.margem;
+    if (ordenar==="lucro")    return b.lucro - a.lucro;
+    if (ordenar==="pacotes")  return b.pacotes - a.pacotes;
+    if (ordenar==="faturado") return b.faturado - a.faturado;
+    if (ordenar==="pago")     return b.pago - a.pago;
+    return 0;
+  });
+
+  const totais = dados.reduce((s,d) => ({
+    pacotes:  s.pacotes  + d.pacotes,
+    faturado: s.faturado + d.faturado,
+    pago:     s.pago     + d.pago,
+    lucro:    s.lucro    + d.lucro,
+  }), { pacotes:0, faturado:0, pago:0, lucro:0 });
+
+  const margemTotal = totais.faturado > 0 ? (totais.lucro / totais.faturado) * 100 : 0;
+
+  const corMargem = m => m >= 30 ? "#10b981" : m >= 15 ? "#f59e0b" : m >= 0 ? "#ef4444" : "#7f1d1d";
+  const bgMargem  = m => m >= 30 ? "bg-emerald-500/10 border-emerald-500/30" : m >= 15 ? "bg-amber-500/10 border-amber-500/30" : "bg-red-500/10 border-red-500/30";
+
+  if (dados.length === 0) return (
+    <div className="p-8 text-center text-slate-500">
+      <p className="text-4xl mb-3">📊</p>
+      <p>Nenhum fechamento gerado ainda.</p>
+      <p className="text-xs mt-1">Gere um fechamento para ver a análise.</p>
+    </div>
+  );
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* KPIs gerais */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">Total de Pacotes</p>
+          <p className="text-2xl font-black text-slate-100">{totais.pacotes.toLocaleString("pt-BR")}</p>
+          <p className="text-xs text-slate-500 mt-1">{dados.length} agregado(s)</p>
+        </div>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">Receita Gerada</p>
+          <p className="text-2xl font-black text-emerald-400">{fmt(totais.faturado)}</p>
+          <p className="text-xs text-slate-500 mt-1">pelo faturamento dos CTEs</p>
+        </div>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">Total Pago</p>
+          <p className="text-2xl font-black text-red-400">{fmt(totais.pago)}</p>
+          <p className="text-xs text-slate-500 mt-1">aos agregados</p>
+        </div>
+        <div className={"rounded-xl p-4 border-2 "+(margemTotal>=20?"bg-emerald-500/10 border-emerald-500/30":margemTotal>=10?"bg-amber-500/10 border-amber-500/30":"bg-red-500/10 border-red-500/30")}>
+          <p className="text-xs text-slate-400 mb-1">Margem Total</p>
+          <p className="text-2xl font-black" style={{color:corMargem(margemTotal)}}>{margemTotal.toFixed(1)}%</p>
+          <p className="text-xs text-slate-500 mt-1">{fmt(totais.lucro)} de lucro</p>
+        </div>
+      </div>
+
+      {/* Ordenação */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="text-xs text-slate-400 font-semibold">Ordenar por:</p>
+        {[["margem","📈 Margem"],["lucro","💰 Lucro"],["pacotes","📦 Pacotes"],["faturado","💵 Receita"],["pago","🧾 Pago"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setOrdenar(v)}
+            className={"text-xs px-3 py-1.5 rounded-full border font-semibold transition-all "+(ordenar===v?"bg-red-600 border-red-600 text-white":"bg-slate-800 border-slate-700 text-slate-400 hover:border-red-500")}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Tabela por agregado */}
+      <div className="space-y-3">
+        {sorted.map((d, idx) => (
+          <div key={d.id} className={"rounded-xl border p-4 space-y-3 "+(bgMargem(d.margem))}>
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                  style={{background:corMargem(d.margem)}}>
+                  {idx+1}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-100">{d.nome}</p>
+                  <p className="text-xs text-slate-500">Mat. {d.mat||"—"} · {d.qtdFec} fechamento(s)</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-400">Margem</p>
+                <p className="text-2xl font-black" style={{color:corMargem(d.margem)}}>{d.margem.toFixed(1)}%</p>
+              </div>
+            </div>
+
+            {/* Métricas */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">📦 Pacotes</p>
+                <p className="text-lg font-bold text-slate-100">{d.pacotes.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-slate-600">{d.qtdFec > 0 ? Math.round(d.pacotes/d.qtdFec) : 0}/fec</p>
+              </div>
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">💵 Receita</p>
+                <p className="text-sm font-bold text-emerald-400">{fmt(d.faturado)}</p>
+                <p className="text-xs text-slate-600">{d.pacotes>0?fmt(d.faturado/d.pacotes):"—"}/cte</p>
+              </div>
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">🧾 Pago</p>
+                <p className="text-sm font-bold text-red-400">{fmt(d.pago)}</p>
+                <p className="text-xs text-slate-600">{d.pacotes>0?fmt(d.pago/d.pacotes):"—"}/cte</p>
+              </div>
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">💰 Lucro</p>
+                <p className={"text-sm font-bold "+(d.lucro>=0?"text-emerald-400":"text-red-400")}>{fmt(d.lucro)}</p>
+                {d.debitos > 0 && <p className="text-xs text-orange-400">{fmt(d.debitos)} em débitos</p>}
+              </div>
+            </div>
+
+            {/* Barra de margem */}
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1">
+                <span>Custo ({(100-d.margem).toFixed(1)}%)</span>
+                <span>Margem ({d.margem.toFixed(1)}%)</span>
+              </div>
+              <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{width:Math.max(0,Math.min(100,d.margem))+"%", background:corMargem(d.margem)}}/>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-slate-600 text-center">* Receita = faturamento Jadlog dos CTEs entregues. Margem = (Receita − Pago) ÷ Receita</p>
+    </div>
+  );
+}
+
 function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMotoristas, dreEntradas, setDreEntradas, fixedCosts, costEntries, faturamentosJadlog, acrescimos, tickets, setTickets }) {
   const [subView, setSubView] = useState("lista");
   const [showNovo, setShowNovo] = useState(false);
@@ -5630,7 +5796,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
         <div className="flex gap-2 flex-wrap">
           {userHasFechamento(user) && (
             <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
-              {[["lista","📋 Fechamentos"],["mots","🚚 Motoristas"],...(userHasDRE(user)?[["dre","📊 DRE"]]:[])].map(([v,l])=>(
+              {[["lista","📋 Fechamentos"],["mots","🚚 Motoristas"],["analise","📈 Análise"],...(userHasDRE(user)?[["dre","📊 DRE"]]:[])].map(([v,l])=>(
                 <button key={v} onClick={()=>setSubView(v)}
                   className={"px-3 py-1.5 font-semibold transition-all "+(subView===v?"bg-red-600 text-white":"bg-slate-800 text-slate-400 hover:text-slate-200")+""}>{l}</button>
               ))}
@@ -5643,6 +5809,7 @@ function FechamentoView({ user, fechamentos, setFechamentos, motoristas, setMoto
       </div>
 
       {subView === "mots" && <MotoristasView motoristas={motoristas} setMotoristas={setMotoristas} />}
+      {subView === "analise" && <AnaliseFechamentos fechamentos={fechamentos} motoristas={motoristas}/>}
       {subView === "dre" && userHasDRE(user) && <DreFechamento fechamentos={fechamentos} motoristas={motoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
 
       {subView === "lista" && (
