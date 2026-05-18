@@ -277,30 +277,34 @@ const __LAST_WRITE__ = {}; // timestamp of last local write per key
 const SYNC_KEYS = ["ops3_tickets","ops3_ticketsExcluidos","ops3_fechamentos","ops3_motoristas","ops3_tasks","ops3_templates","ops3_users"];
 
 
-// Strip large base64 fields before saving to Supabase
-const stripBase64 = (data, key) => {
-  if (key !== "ops3_tickets" && key !== "ops3_ticketsExcluidos") return data;
-  if (!Array.isArray(data)) return data;
-  return data.map(t => {
-    const clean = {...t};
-    if (clean.respostaData) clean.respostaData = "__LOCAL__";
-    if (clean.pdfData)      clean.pdfData      = "__LOCAL__";
-    return clean;
-  });
+// Save ticket image to Supabase as separate small record
+const saveTicketImage = (ticketId, data, nome) => {
+  if (!data || data === "__LOCAL__") return;
+  const sb = getSupabase();
+  if (!sb) return;
+  const k = "ticketImg_"+ticketId;
+  try { localStorage.setItem(k, JSON.stringify({data, nome})); } catch {}
+  sb.from("app_data")
+    .upsert({ key: k, value: {data, nome} }, { onConflict: "key" })
+    .then(({error}) => { if(error) console.warn("[img] save error:", error.message); });
 };
 
-// Merge Supabase data with local data — preserve base64 fields from local
-const mergeWithLocal = (remoteData, localData, key) => {
-  if (key !== "ops3_tickets" && key !== "ops3_ticketsExcluidos") return remoteData;
-  if (!Array.isArray(remoteData) || !Array.isArray(localData)) return remoteData;
-  return remoteData.map(rt => {
-    const lt = localData.find(x => x.id === rt.id);
-    return {
-      ...rt,
-      respostaData: (lt?.respostaData && lt.respostaData !== "__LOCAL__") ? lt.respostaData : (rt.respostaData !== "__LOCAL__" ? rt.respostaData : undefined),
-      pdfData:      (lt?.pdfData      && lt.pdfData      !== "__LOCAL__") ? lt.pdfData      : (rt.pdfData      !== "__LOCAL__" ? rt.pdfData      : undefined),
-    };
-  });
+// Load ticket image from Supabase/localStorage
+const loadTicketImage = (ticketId, cb) => {
+  const k = "ticketImg_"+ticketId;
+  try {
+    const local = localStorage.getItem(k);
+    if (local) { const p = JSON.parse(local); if (p?.data) { cb(p.data, p.nome); return; } }
+  } catch {}
+  const sb = getSupabase();
+  if (!sb) return;
+  sb.from("app_data").select("value").eq("key", k).single()
+    .then(({data}) => {
+      if (data?.value?.data) {
+        try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
+        cb(data.value.data, data.value.nome);
+      }
+    }).catch(()=>{});
 };
 
 function useLS(key, init) {
@@ -323,9 +327,8 @@ function useLS(key, init) {
     try { localStorage.setItem(k, JSON.stringify(nv)); } catch {}
     const sb = getSupabase();
     if (sb) {
-      const nvForSupabase = stripBase64(nv, k);
       sb.from("app_data")
-        .upsert({ key: k, value: nvForSupabase }, { onConflict: "key" })
+        .upsert({ key: k, value: nv }, { onConflict: "key" })
         .then(({ error }) => { if (error) console.warn("[useLS] save error:", error.message); });
     }
   };
@@ -340,11 +343,9 @@ function useLS(key, init) {
       .then(({ data }) => {
         if (!force && Date.now() - (__LAST_WRITE__[k]||0) < 3*60*1000) return;
         if (data?.value !== undefined && data.value !== null) {
-          // Merge remote with local to preserve base64 images
-          const merged = mergeWithLocal(data.value, __STORE__[k], k);
-          __STORE__[k] = merged;
-          setVal(merged);
-          try { localStorage.setItem(k, JSON.stringify(merged)); } catch {}
+          __STORE__[k] = data.value;
+          setVal(data.value);
+          try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
         }
         __LOADED__[k] = true;
       })
@@ -4872,6 +4873,7 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
     const hist=[{id:uid(),tipo:"criacao",texto:"Ticket criado por "+user.name,autor:user.name,data:now()}];
     const newTicket = {...t, id:newId, criadoEm:now(), criadoPor:user.id, criadoNome:user.name, historico:hist};
     setTickets(p=>[...p, newTicket]);
+    if (newTicket.pdfData) saveTicketImage(newId+"_pdf", newTicket.pdfData, newTicket.pdfNome||"anexo");
     setShowNew(false);
     setToast("Ticket criado com sucesso!");
     // Auto WhatsApp ao criar
@@ -5281,6 +5283,56 @@ function TicketDetalheWrapper({ ticket, user, motoristas, onBack, onUpd, onDel, 
   );
 }
 
+
+function TicketImageViewer({ ticket }) {
+  const [imgData, setImgData] = useState(ticket.respostaData && ticket.respostaData !== "__LOCAL__" ? ticket.respostaData : null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (imgData || !ticket.respostaNome) return;
+    // Try to load from Supabase/localStorage
+    setLoading(true);
+    loadTicketImage(ticket.id, (data) => {
+      setImgData(data);
+      setLoading(false);
+    });
+    const t = setTimeout(() => setLoading(false), 5000);
+    return () => clearTimeout(t);
+  }, [ticket.id]);
+
+  if (!ticket.respostaNome) return null;
+
+  const isImg = d => d && d.startsWith("data:image");
+
+  return (
+    <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/30 space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-xs font-bold text-emerald-400">✅ Evidência enviada em {(ticket.respondidoEm||"").slice(0,10)}</p>
+        <p className="text-xs text-slate-400 font-mono">{ticket.respostaNome}</p>
+      </div>
+      {loading && <p className="text-xs text-slate-500 animate-pulse">🔄 Carregando imagem...</p>}
+      {!loading && imgData && isImg(imgData) && (
+        <img src={imgData} alt="evidencia" className="max-w-full rounded-lg border border-slate-700" style={{maxHeight:"400px"}}/>
+      )}
+      {!loading && imgData && !isImg(imgData) && (
+        <a href={imgData} download={ticket.respostaNome} target="_blank" rel="noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm hover:bg-blue-500/30">
+          📄 Baixar arquivo
+        </a>
+      )}
+      {!loading && !imgData && ticket.respostaNome && (
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-slate-500">Imagem disponível apenas no dispositivo de envio.</p>
+          <button onClick={()=>{setLoading(true);loadTicketImage(ticket.id,(d)=>{setImgData(d);setLoading(false);});}}
+            className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">
+            🔄 Tentar carregar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TicketDetalhe({ ticket, user, motoristas, onBack, onUpd, onDel, onWhats, onWord, onContestar }) {
   const fileRef = useRef();
   const camRef  = useRef();
@@ -5363,8 +5415,7 @@ function TicketDetalhe({ ticket, user, motoristas, onBack, onUpd, onDel, onWhats
         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Resposta do Agregado</p>
         {ticket.respostaNome ? (
           <div className="space-y-2">
-            <p className="text-xs text-emerald-400">✅ Respondido em {(ticket.respondidoEm||"").slice(0,10)} — {ticket.respostaNome}</p>
-            {isImg(ticket.respostaData)&&<img src={ticket.respostaData} alt="resposta" className="max-w-full rounded-lg border border-emerald-500/30" style={{maxHeight:"250px"}}/>}
+            <TicketImageViewer ticket={ticket}/>
           </div>
         ) : (
           <div className="space-y-3">
@@ -6177,6 +6228,7 @@ function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula, motorista
         if (x.id!==ticketId) return x;
         if (x.status==="respondido"&&x.respostaData) return x;
         const h = { id:uid(), tipo:"resposta", texto:"Evidência enviada: "+file.name, autor:mCad?.nome||"Agregado", data:now() };
+        saveTicketImage(ticketId, dataUrl, file.name);
         return {...x, status:"respondido", respostaNome:file.name, respostaData:dataUrl, respondidoEm:now(), historico:[...(x.historico||[]), h]};
       }));
     });
@@ -8771,6 +8823,22 @@ export default function OpsControl() {
     const iv = setInterval(checkSLA, 60_000); // re-check every minute
     return () => clearInterval(iv);
   }, [templates]); // re-register when templates change
+
+  // Retroactive migration: save existing ticket images to separate Supabase keys
+  useEffect(() => {
+    if (localStorage.getItem("imgMigrationDone_v1")) return;
+    setTimeout(() => {
+      (tickets||[]).forEach(t => {
+        if (t.respostaData && t.respostaData !== "__LOCAL__" && t.respostaData.startsWith("data:"))
+          saveTicketImage(t.id, t.respostaData, t.respostaNome||"evidencia");
+        if (t.pdfData && t.pdfData !== "__LOCAL__" && t.pdfData.startsWith("data:"))
+          saveTicketImage(t.id+"_pdf", t.pdfData, t.pdfNome||"anexo");
+      });
+      localStorage.setItem("imgMigrationDone_v1", "1");
+    }, 5000);
+  // eslint-disable-next-line
+  }, []);
+
 
   if (portalMode) return (
     <PortalAgregadoPage
