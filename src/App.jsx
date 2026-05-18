@@ -4664,7 +4664,7 @@ const sendWhatsApp = (t, motoristas, updTicket) => {
   if (updTicket) updTicket(t.id, {status:"aguardando", whatsappEnviadoEm:new Date().toISOString()});
 };
 
-function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechamentos, setFechamentos, ticketsExcluidos, setTicketsExcluidos }) {
+function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechamentos, setFechamentos, ticketsExcluidos, setTicketsExcluidos, ticketTitulos, setTicketTitulos }) {
   const [showNew, setShowNew]     = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [filtStatus, setFiltStatus] = useState("todos");
@@ -4690,10 +4690,17 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
     });
   };
 
+  const [toast, setToast] = useState(null);
+
   const saveTicket = t => {
+    const newId = uid();
     const hist=[{id:uid(),tipo:"criacao",texto:"Ticket criado por "+user.name,autor:user.name,data:now()}];
-    setTickets(p=>[...p,{...t,id:uid(),criadoEm:now(),criadoPor:user.id,criadoNome:user.name,historico:hist}]);
+    const newTicket = {...t, id:newId, criadoEm:now(), criadoPor:user.id, criadoNome:user.name, historico:hist};
+    setTickets(p=>[...p, newTicket]);
     setShowNew(false);
+    setToast("Ticket criado com sucesso!");
+    // Auto WhatsApp ao criar
+    setTimeout(() => sendWhatsApp(newTicket, motoristas, (id,patch)=>setTickets(p=>p.map(x=>x.id===id?{...x,...patch}:x))), 300);
   };
   const updTicket = (id,patch) => setTickets(p=>p.map(t=>{
     if(t.id!==id) return t;
@@ -4773,6 +4780,7 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
 
   return (
     <div className="p-6 space-y-5">
+      {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h1 className="text-xl font-bold text-slate-100">Atendimento — Acareação</h1>
           <p className="text-sm text-slate-400">{tickets.length} ticket(s) · {tickets.filter(t=>t.status==="aguardando").length} aguardando resposta</p></div>
@@ -4789,6 +4797,7 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
           }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-emerald-700 text-slate-300 hover:text-white text-xs font-semibold transition-all border border-slate-600" title="Buscar tickets mais recentes do servidor">
             <RefreshCw size={12}/>Sincronizar
           </button>
+          {canEdit&&<TitulosManager titulos={ticketTitulos} setTitulos={setTicketTitulos}/>}
           {canEdit&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Novo Ticket</Btn>}
           <Btn variant="secondary" onClick={()=>exportarPDF(tickets,filtStatus,motoristas)}><FileText size={14}/>Exportar PDF</Btn>
         </div>
@@ -4889,12 +4898,119 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
         })}
       </div>
 
-      {showNew&&<NovoTicketModal motoristas={motoristas} onClose={()=>setShowNew(false)} onSave={saveTicket}/>}
+      {showNew&&<NovoTicketModal motoristas={motoristas} onClose={()=>setShowNew(false)} onSave={saveTicket} ticketTitulos={ticketTitulos}/>}
     </div>
   );
 }
 
-function NovoTicketModal({ motoristas, onClose, onSave, tituloInicial }) {
+
+// ── Toast notification ──────────────────────────────────
+function Toast({ msg, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, []);
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] animate-bounce">
+      <div className="bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-semibold border border-emerald-400">
+        <span className="text-lg">✅</span>{msg}
+      </div>
+    </div>
+  );
+}
+
+
+// ── Gerenciador de Títulos de Ticket ──────────────────────────────
+function TitulosManager({ titulos, setTitulos }) {
+  const [open, setOpen] = useState(false);
+  const [novoTitulo, setNovoTitulo] = useState("");
+  const [novaDesc, setNovaDesc] = useState("");
+  const [editId, setEditId] = useState(null);
+
+  const addTitulo = () => {
+    if (!novoTitulo.trim()) return;
+    setTitulos(p => [...p, { id:uid(), titulo:novoTitulo.trim(), descricao:novaDesc.trim() }]);
+    setNovoTitulo(""); setNovaDesc("");
+  };
+  const delTitulo = id => setTitulos(p => p.filter(t => t.id !== id));
+  const saveTitulo = (id, titulo, descricao) => {
+    setTitulos(p => p.map(t => t.id===id ? {...t, titulo, descricao} : t));
+    setEditId(null);
+  };
+
+  return (
+    <>
+      <button onClick={()=>setOpen(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold transition-all border border-slate-600"
+        title="Gerenciar títulos e modelos">
+        ⚙️ Títulos
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={()=>setOpen(false)}>
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-100">⚙️ Gerenciar Títulos de Ticket</h3>
+              <button onClick={()=>setOpen(false)} className="text-slate-400 hover:text-slate-200"><X size={18}/></button>
+            </div>
+            <p className="text-xs text-slate-500">Estes títulos aparecem como opções no formulário de criação de ticket.</p>
+
+            {/* Lista atual */}
+            <div className="space-y-2">
+              {(titulos||[]).map(t => (
+                <div key={t.id} className="bg-slate-900 border border-slate-700 rounded-xl p-3">
+                  {editId===t.id ? (
+                    <EditTituloInline titulo={t} onSave={saveTitulo} onCancel={()=>setEditId(null)}/>
+                  ) : (
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-100">{t.titulo}</p>
+                        {t.descricao && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t.descricao}</p>}
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={()=>setEditId(t.id)} className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">✏️</button>
+                        <button onClick={()=>{if(window.confirm("Excluir título?"))delTitulo(t.id);}} className="text-xs px-2 py-1 rounded bg-slate-700 text-red-400 hover:bg-red-500/20">🗑</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Adicionar novo */}
+            <div className="border-t border-slate-700 pt-4 space-y-2">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">+ Adicionar novo título</p>
+              <input value={novoTitulo} onChange={e=>setNovoTitulo(e.target.value)}
+                placeholder="Ex: Avaria na entrega"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+              <textarea value={novaDesc} onChange={e=>setNovaDesc(e.target.value)}
+                placeholder="Texto padrão da descrição (opcional)..."
+                rows={3}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500 resize-none"/>
+              <button onClick={addTitulo} disabled={!novoTitulo.trim()}
+                className="w-full py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold disabled:opacity-40 transition-all">
+                + Adicionar Título
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function EditTituloInline({ titulo, onSave, onCancel }) {
+  const [t, setT] = useState(titulo.titulo);
+  const [d, setD] = useState(titulo.descricao||"");
+  return (
+    <div className="space-y-2">
+      <input value={t} onChange={e=>setT(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+      <textarea value={d} onChange={e=>setD(e.target.value)} rows={2} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-red-500 resize-none"/>
+      <div className="flex gap-2">
+        <button onClick={()=>onSave(titulo.id,t,d)} className="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">Salvar</button>
+        <button onClick={onCancel} className="flex-1 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-xs">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function NovoTicketModal({ motoristas, onClose, onSave, tituloInicial, ticketTitulos }) {
   const fileRef = useRef();
   const defaultPrazo = new Date(); defaultPrazo.setDate(defaultPrazo.getDate()+5);
   const [f, setF] = useState({ titulo:tituloInicial||"", cte:"", descricao:"", motoristaId:"", nomeAgregado:"", matricula:"", valor:"", prazoData:defaultPrazo.toISOString().slice(0,10), status:"aberto", pdfNome:"", pdfData:null });
@@ -4908,7 +5024,24 @@ function NovoTicketModal({ motoristas, onClose, onSave, tituloInicial }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
         <h3 className="text-base font-bold text-slate-100">{tituloInicial?"Abrir Contestação":"Novo Ticket de Acareação"}</h3>
-        <Input label="Título *" placeholder="Ex: Avaria, Extravio, Devolução..." value={f.titulo} onChange={e=>sf("titulo",e.target.value)}/>
+        {/* Título com opções predefinidas */}
+        <div className="space-y-1.5">
+          <label className="text-xs text-slate-400 font-medium block">Título *</label>
+          {(ticketTitulos||[]).length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {(ticketTitulos||[]).map(t=>(
+                <button key={t.id} type="button"
+                  onClick={()=>{sf("titulo",t.titulo);if(t.descricao&&!f.descricao)sf("descricao",t.descricao);}}
+                  className={"text-xs px-2.5 py-1.5 rounded-full border transition-all "+(f.titulo===t.titulo?"bg-red-600 border-red-600 text-white":"bg-slate-800 border-slate-600 text-slate-400 hover:border-red-500 hover:text-red-400")}>
+                  {t.titulo}
+                </button>
+              ))}
+            </div>
+          )}
+          <input value={f.titulo} onChange={e=>sf("titulo",e.target.value)}
+            placeholder="Ou digite um título personalizado..."
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-red-500"/>
+        </div>
         <Input label="Número do CTE" placeholder="Ex: 1234567" value={f.cte} onChange={e=>sf("cte",e.target.value.replace(/[^0-9]/g,""))}/>
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Agregado</label>
@@ -5788,6 +5921,167 @@ function PortalAcareacaoTab({ tickets, setTickets, mCad, motMatricula, motorista
   );
 }
 
+
+// ── Portal Agregado: Menu de Tickets ─────────────────────────────
+function PortalTicketsMenu({ tickets, setTickets, mCad, motMatricula }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedTitulo, setSelectedTitulo] = useState(null);
+
+  const meusTickets = (tickets||[]).filter(t => {
+    if (mCad && t.motoristaId===mCad.id) return true;
+    if (mCad && t.matricula && t.matricula===mCad.matricula) return true;
+    if (motMatricula && t.matricula && t.matricula===motMatricula) return true;
+    if (motMatricula && t.nomeAgregado && mCad && t.nomeAgregado.trim().toUpperCase()===mCad.nome.trim().toUpperCase()) return true;
+    return false;
+  }).sort((a,b) => (b.criadoEm||"").localeCompare(a.criadoEm||""));
+
+  const pendentes = meusTickets.filter(t => t.status==="aguardando"||t.status==="aberto");
+
+  // Group by titulo
+  const grupos = {};
+  meusTickets.forEach(t => {
+    const g = t.titulo||"Outros";
+    if (!grupos[g]) grupos[g] = [];
+    grupos[g].push(t);
+  });
+
+  const calcDias = prazo => {
+    if (!prazo) return null;
+    return Math.ceil((new Date(prazo+"T23:59:59") - new Date()) / 86400000);
+  };
+  const handleEvidencia = (ticketId, file) => {
+    compressImage(file).then(dataUrl => {
+      if (!dataUrl) { alert("Erro ao processar. Tente novamente."); return; }
+      setTickets(p => p.map(x => {
+        if (x.id!==ticketId) return x;
+        if (x.status==="respondido"&&x.respostaData) return x;
+        const h = { id:uid(), tipo:"resposta", texto:"Evidência enviada: "+file.name, autor:mCad?.nome||"Agregado", data:now() };
+        return {...x, status:"respondido", respostaNome:file.name, respostaData:dataUrl, respondidoEm:now(), historico:[...(x.historico||[]),h]};
+      }));
+    });
+  };
+  const isImg = d => d && d.startsWith("data:image");
+
+  return (
+    <div className="space-y-3">
+      {/* Header button */}
+      <button onClick={()=>{if(meusTickets.length>0){setMenuOpen(p=>!p); setSelectedTitulo(null);}}}
+        className={"w-full rounded-xl p-4 border-2 flex items-center justify-between transition-all "+(pendentes.length>0?"bg-red-500/10 border-red-500/40 hover:bg-red-500/15":"bg-slate-800 border-slate-700 hover:border-slate-600")}>
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🎫</span>
+          <div className="text-left">
+            <p className={"font-bold text-base "+(pendentes.length>0?"text-red-300":"text-slate-100")}>
+              TICKETS DE ACAREAÇÃO
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {meusTickets.length} ticket(s) · {pendentes.length>0 ? <span className="text-red-400 font-semibold">{pendentes.length} aguardando sua resposta</span> : "todos respondidos"}
+            </p>
+          </div>
+        </div>
+        {meusTickets.length > 0 && <span className={"text-slate-400 transition-transform text-lg "+(menuOpen?"rotate-180":"")}>▼</span>}
+        {meusTickets.length === 0 && <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded-full">Nenhum ticket</span>}
+      </button>
+
+      {menuOpen && meusTickets.length > 0 && (
+        <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
+          {/* Menu de títulos */}
+          {selectedTitulo === null ? (
+            <div className="divide-y divide-slate-800">
+              <div className="px-4 py-3 bg-slate-800">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Filtrar por tipo</p>
+              </div>
+              {/* All tickets option */}
+              <button onClick={()=>setSelectedTitulo("__todos__")} className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-800 transition-all text-left">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">📋</span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">Todos os Tickets</p>
+                    <p className="text-xs text-slate-500">{meusTickets.length} ticket(s)</p>
+                  </div>
+                </div>
+                <span className="text-slate-500 text-sm">›</span>
+              </button>
+              {Object.entries(grupos).map(([titulo, tks]) => {
+                const pend = tks.filter(t=>t.status==="aguardando"||t.status==="aberto").length;
+                return (
+                  <button key={titulo} onClick={()=>setSelectedTitulo(titulo)} className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-800 transition-all text-left">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">📁</span>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-100">{titulo}</p>
+                        <p className="text-xs text-slate-500">{tks.length} ticket(s){pend>0&&<span className="text-red-400 font-semibold"> · {pend} pendente(s)</span>}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {pend>0&&<span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">{pend}</span>}
+                      <span className="text-slate-500 text-sm">›</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            /* Ticket list for selected titulo */
+            <div>
+              <div className="px-4 py-3 bg-slate-800 flex items-center gap-3 border-b border-slate-700">
+                <button onClick={()=>setSelectedTitulo(null)} className="text-slate-400 hover:text-slate-200 text-lg">‹</button>
+                <p className="text-sm font-bold text-slate-100">{selectedTitulo==="__todos__"?"Todos os Tickets":selectedTitulo}</p>
+              </div>
+              <div className="p-3 space-y-3">
+                {(selectedTitulo==="__todos__"?meusTickets:grupos[selectedTitulo]||[]).map(t => {
+                  const st = TICKET_STATUS?.[t.status]||{label:t.status,cor:"#94a3b8"};
+                  const dias = calcDias(t.prazoData);
+                  const urgente = dias!==null&&dias<=1&&(t.status==="aguardando"||t.status==="aberto");
+                  return (
+                    <div key={t.id} className={"rounded-xl border-2 p-4 space-y-3 "+(urgente?"bg-red-500/5 border-red-500/50":"bg-slate-800 border-slate-700")}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-xs font-mono text-slate-500">#{t.id.slice(-6).toUpperCase()}</span>
+                            {t.cte&&<span className="text-xs font-mono text-blue-400 bg-blue-500/10 px-1.5 rounded">CTE {t.cte}</span>}
+                            <span className="text-sm font-bold text-slate-100">{t.titulo}</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full font-semibold border" style={{color:st.cor,borderColor:st.cor+"50",background:st.cor+"15"}}>{st.label}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">Aberto em {(t.criadoEm||"").slice(0,10)} · Prazo: <span className="text-amber-400 font-semibold">{t.prazoData||"—"}</span></p>
+                        </div>
+                        <div className="text-right flex-shrink-0 space-y-1">
+                          <p className="text-xs text-slate-500">Valor em risco</p>
+                          <p className="text-xl font-bold text-red-400">R$ {(t.valor||0).toFixed(2).replace(".",",")}</p>
+                          {dias!==null&&(t.status==="aguardando"||t.status==="aberto")&&(
+                            dias<0?<p className="text-xs font-bold text-red-500">⚡ Vencido</p>
+                            :dias===0?<p className="text-xs font-bold text-red-400 animate-pulse">🚨 Hoje!</p>
+                            :dias<=2?<p className="text-xs font-bold text-amber-400">⚠ {dias}d</p>
+                            :<p className="text-xs text-slate-500">{dias}d restantes</p>
+                          )}
+                        </div>
+                      </div>
+                      {urgente&&<div className="bg-red-500/10 border border-red-500/40 rounded-lg p-3 animate-pulse"><p className="text-xs font-bold text-red-400">🚨 URGENTE — {dias<=0?"Prazo vencido!":"Último dia!"} Sem evidência = débito no fechamento!</p></div>}
+                      {t.descricao&&<p className="text-xs text-slate-300 bg-slate-900 rounded-lg p-3 border border-slate-700">{t.descricao}</p>}
+                      {t.pdfData&&<div className="border border-slate-700 rounded-lg p-3 bg-slate-900"><p className="text-xs font-bold text-slate-400 mb-2">📎 {t.pdfNome||"Evidência"}</p>{isImg(t.pdfData)?<img src={t.pdfData} alt="ev" className="max-w-full rounded-lg" style={{maxHeight:"280px"}}/>:<a href={t.pdfData} download={t.pdfNome} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm">📄 Baixar PDF</a>}</div>}
+                      {t.respostaNome&&<div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/30"><p className="text-xs font-bold text-emerald-400">✅ Evidência enviada em {(t.respondidoEm||"").slice(0,10)} — {t.respostaNome}</p>{isImg(t.respostaData)&&<img src={t.respostaData} alt="resp" className="max-w-full rounded-lg mt-2" style={{maxHeight:"200px"}}/>}</div>}
+                      {t.status==="debitado"&&<div className="bg-red-500/10 rounded-lg p-3 border border-red-500/30"><p className="text-xs font-bold text-red-400">⚡ Debitado: R$ {(t.valor||0).toFixed(2).replace(".",",")} em {(t.debitadoEm||"").slice(0,10)}</p></div>}
+                      {(t.status==="aguardando"||t.status==="aberto")&&!t.respostaNome&&(
+                        <div className="pt-2 border-t border-slate-700">
+                          <p className="text-xs font-bold text-amber-400 mb-2">📎 Enviar sua evidência</p>
+                          <div className="flex gap-2">
+                            <label className="flex-1 py-3 rounded-xl border-2 border-amber-500/40 text-xs text-center text-amber-400 hover:bg-amber-500/10 cursor-pointer font-semibold">📷 Tirar Foto<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleEvidencia(t.id,f);}}/></label>
+                            <label className="flex-1 py-3 rounded-xl border-2 border-blue-500/40 text-xs text-center text-blue-400 hover:bg-blue-500/10 cursor-pointer font-semibold">📎 Arquivo<input type="file" accept="image/*,.pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleEvidencia(t.id,f);}}/></label>
+                          </div>
+                        </div>
+                      )}
+                      {(t.historico||[]).length>0&&<div className="pt-2 border-t border-slate-800"><p className="text-xs font-bold text-slate-600 mb-1">Histórico</p>{[...(t.historico||[])].reverse().slice(0,3).map(h=><p key={h.id} className="text-xs text-slate-600">• {h.texto} — {(h.data||"").slice(0,16).replace("T"," ")}</p>)}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DebitosCard({ meusFechamentos, tickets, mCad }) {
   const [open, setOpen] = useState(false);
   const getMonth = d => { if(!d)return"Sem data"; const [y,m]=(d||"").slice(0,7).split("-"); const ms=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]; return (ms[parseInt(m)-1]||m)+"/"+y; };
@@ -6129,77 +6423,7 @@ function PortalAgregadoPage({ motMatricula, motoristas, fechamentos, setFechamen
             );
           })}
         </div>
-      {/* ── TICKETS DE ACAREAÇÃO ── */}
-      {(() => {
-        const meusTickets=(tickets||[]).filter(t=>{
-          if(mCad&&t.motoristaId===mCad.id)return true;
-          if(mCad&&t.matricula&&t.matricula===mCad.matricula)return true;
-          return false;
-        }).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
-        const calcDias=prazo=>{if(!prazo)return null;return Math.ceil((new Date(prazo+"T23:59:59")-new Date())/86400000);};
-        const handleEvidencia=(ticketId,file)=>{
-          compressImage(file).then(dataUrl=>{
-            setTickets(p=>p.map(x=>{
-              if(x.id!==ticketId)return x;
-              // Never overwrite evidence that already exists
-              if(x.status==="respondido"&&x.respostaData)return x;
-              const h={id:uid(),tipo:"resposta",texto:"Evidência enviada: "+file.name,autor:mCad?.nome||"Agregado",data:now()};
-              return{...x,status:"respondido",respostaNome:file.name,respostaData:dataUrl,respondidoEm:now(),historico:[...(x.historico||[]),h]};
-            }));
-          });
-        };
-        const isImg=d=>d&&d.startsWith("data:image");
-        if(meusTickets.length===0)return null;
-        const pendentes=meusTickets.filter(t=>t.status==="aguardando"||t.status==="aberto");
-        return (
-          <div className="space-y-3">
-            <div className={"rounded-xl p-4 border-2 "+(pendentes.length>0?"bg-red-500/10 border-red-500/40":"bg-slate-800 border-slate-700")}>
-              <p className={"font-bold text-sm "+(pendentes.length>0?"text-red-300":"text-slate-300")}>⚠ Tickets de Acareação{pendentes.length>0&&` — ${pendentes.length} aguardando sua resposta`}</p>
-              {pendentes.length>0&&<p className="text-xs text-red-400/70 mt-1">Sem resposta dentro do prazo, o valor será debitado automaticamente do seu fechamento.</p>}
-            </div>
-            {meusTickets.map(t=>{
-              const st=TICKET_STATUS?.[t.status]||{label:t.status,cor:"#94a3b8"};
-              const dias=calcDias(t.prazoData);
-              const urgente=dias!==null&&dias<=1&&(t.status==="aguardando"||t.status==="aberto");
-              return (
-                <div key={t.id} className={"rounded-xl border-2 p-4 space-y-3 "+(urgente?"bg-red-500/5 border-red-500/50":"bg-slate-900 border-slate-700")}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-xs font-mono text-slate-500">#{t.id.slice(-6).toUpperCase()}</span>
-                        {t.cte&&<span className="text-xs font-mono text-blue-400 bg-blue-500/10 px-1.5 rounded">CTE {t.cte}</span>}
-                        <span className="text-sm font-bold text-slate-100">{t.titulo}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold border" style={{color:st.cor,borderColor:st.cor+"50",background:st.cor+"15"}}>{st.label}</span>
-                      </div>
-                      <p className="text-xs text-slate-400">Aberto em {(t.criadoEm||"").slice(0,10)} · Prazo: <span className="text-amber-400 font-semibold">{t.prazoData||"—"}</span></p>
-                    </div>
-                    <div className="text-right flex-shrink-0 space-y-1">
-                      <p className="text-xs text-slate-500">Valor em risco</p>
-                      <p className="text-xl font-bold text-red-400">R$ {(t.valor||0).toFixed(2).replace(".",",")}</p>
-                      {dias!==null&&(t.status==="aguardando"||t.status==="aberto")&&(dias<0?<p className="text-xs font-bold text-red-500">⚡ Vencido</p>:dias===0?<p className="text-xs font-bold text-red-400 animate-pulse">🚨 Vence HOJE</p>:dias<=2?<p className="text-xs font-bold text-amber-400">⚠ {dias}d restante(s)</p>:<p className="text-xs text-slate-500">{dias} dias</p>)}
-                    </div>
-                  </div>
-                  {urgente&&<div className="bg-red-500/10 border border-red-500/40 rounded-lg p-3 animate-pulse"><p className="text-xs font-bold text-red-400">🚨 URGENTE — {dias<=0?"Prazo vencido!":"Último dia!"} Sem evidência, R$ {(t.valor||0).toFixed(2).replace(".",",")} será debitado do seu próximo fechamento.</p></div>}
-                  {t.descricao&&<p className="text-xs text-slate-300 bg-slate-800 rounded-lg p-3 border border-slate-700">{t.descricao}</p>}
-                  {t.pdfData&&<div className="border border-slate-700 rounded-lg p-3 bg-slate-800"><p className="text-xs font-bold text-slate-400 mb-2">📎 {t.pdfNome||"Evidência"}</p>{isImg(t.pdfData)?<img src={t.pdfData} alt="ev" className="max-w-full rounded-lg" style={{maxHeight:"280px"}}/>:<a href={t.pdfData} download={t.pdfNome||"evidencia.pdf"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm">📄 Baixar PDF</a>}</div>}
-                  {t.respostaNome&&<div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/30"><p className="text-xs font-bold text-emerald-400">✅ Evidência enviada em {(t.respondidoEm||"").slice(0,10)} — {t.respostaNome}</p>{isImg(t.respostaData)&&<img src={t.respostaData} alt="resp" className="max-w-full rounded-lg mt-2" style={{maxHeight:"200px"}}/>}</div>}
-                  {t.status==="debitado"&&<div className="bg-red-500/10 rounded-lg p-3 border border-red-500/30"><p className="text-xs font-bold text-red-400">⚡ Valor debitado: R$ {(t.valor||0).toFixed(2).replace(".",",")} em {(t.debitadoEm||"").slice(0,10)}</p><p className="text-xs text-slate-500 mt-1">Este valor foi descontado do seu fechamento.</p></div>}
-                  {(t.status==="aguardando"||t.status==="aberto")&&!t.respostaNome&&(
-                    <div className="pt-2 border-t border-slate-700">
-                      <p className="text-xs font-bold text-amber-400 mb-2">📎 Enviar sua evidência</p>
-                      <div className="flex gap-2">
-                        <label className="flex-1 py-3 rounded-xl border-2 border-amber-500/40 text-xs text-center text-amber-400 hover:bg-amber-500/10 cursor-pointer font-semibold">📷 Tirar Foto<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleEvidencia(t.id,f);}}/></label>
-                        <label className="flex-1 py-3 rounded-xl border-2 border-blue-500/40 text-xs text-center text-blue-400 hover:bg-blue-500/10 cursor-pointer font-semibold">📎 Enviar Arquivo<input type="file" accept="image/*,.pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleEvidencia(t.id,f);}}/></label>
-                      </div>
-                    </div>
-                  )}
-                  {(t.historico||[]).length>0&&<div className="pt-2 border-t border-slate-800"><p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Histórico</p><div className="space-y-1.5">{[...(t.historico||[])].reverse().map(h=>{const icons={criacao:"🆕",debito:"⚡",encerrado:"✅",whatsapp:"📱",resposta:"📎",contestacao:"↺",acao:"•"};return(<div key={h.id} className="flex items-start gap-2"><span className="text-xs mt-0.5">{icons[h.tipo]||"•"}</span><div><p className="text-xs text-slate-400">{h.texto}</p><p className="text-xs text-slate-600">{(h.data||"").slice(0,16).replace("T"," ")}</p></div></div>);})}</div></div>}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
+      <PortalTicketsMenu tickets={tickets} setTickets={setTickets} mCad={mCad} motMatricula={motMatricula}/>
 
       </div>
     </div>
@@ -8085,6 +8309,14 @@ export default function OpsControl() {
   const [acrescimos, setAcrescimos] = useLS("acrescimos", []);
   const [tickets, setTickets] = useLS("tickets", []);
   const [ticketsExcluidos, setTicketsExcluidos] = useLS("ticketsExcluidos", []);
+  const [ticketTitulos, setTicketTitulos] = useLS("ticketTitulos", [
+    { id:"t1", titulo:"Avaria na Entrega", descricao:"O produto foi entregue com danos visíveis ao destinatário. Verificar se houve manuseio inadequado durante o transporte." },
+    { id:"t2", titulo:"Extravio de Mercadoria", descricao:"Mercadoria não localizada. Verificar registros de entrega e rastreamento do CTE informado." },
+    { id:"t3", titulo:"Devolução não Justificada", descricao:"Entrega devolvida sem motivo registrado ou aceito pelo destinatário. Necessário comprovante de tentativa de entrega." },
+    { id:"t4", titulo:"Tentativa de Entrega não Realizada", descricao:"Constam registros de tentativa de entrega não efetuada sem comprovação. Enviar foto ou evidência da tentativa." },
+    { id:"t5", titulo:"NF Extraviada", descricao:"Nota fiscal não localizada junto à carga. Verificar se houve separação indevida durante o transporte." },
+    { id:"t6", titulo:"Recusa de Recebimento", descricao:"Destinatário recusou o recebimento sem motivo válido. Apresentar comprovante de tentativa e informações do destinatário." },
+  ]);
   const [mobAprovado, setMobAprovado] = useLS("mobAprovado", []);
   const [mobCustos, setMobCustos] = useLS("mobCustos", []);       // custos por terceirizada
   const [dreEntradas, setDreEntradas] = useLS("dreEntradas", []); // lançamentos por quinzena
@@ -8247,7 +8479,7 @@ export default function OpsControl() {
         {view==="revenue"&&hasF&&<RevenueView user={liveUser} acrescimos={acrescimos} setAcrescimos={setAcrescimos} clients={clients} faturamentosJadlog={faturamentosJadlog}/>}
         {view==="profitability"&&hasF&&<ProfitabilityView clients={clients} fixedCosts={fixedCosts} costEntries={costEntries} revenues={revenues} tasks={tasks} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos} forecastEntries={forecastEntries}/>}
         {view==="forecast"&&hasF&&<ForecastView clients={clients} revenues={revenues} forecastEntries={forecastEntries} setForecastEntries={setForecastEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos}/>}
-        {view==="atendimento"&&<AtendimentoView user={liveUser} tickets={tickets} setTickets={setTickets} motoristas={motoristas} users={users} fechamentos={fechamentos} setFechamentos={setFechamentos} ticketsExcluidos={ticketsExcluidos} setTicketsExcluidos={setTicketsExcluidos}/>}
+        {view==="atendimento"&&<AtendimentoView user={liveUser} tickets={tickets} setTickets={setTickets} motoristas={motoristas} users={users} fechamentos={fechamentos} setFechamentos={setFechamentos} ticketsExcluidos={ticketsExcluidos} setTicketsExcluidos={setTicketsExcluidos} ticketTitulos={ticketTitulos} setTicketTitulos={setTicketTitulos}/>}
         {view==="fechamento"&&<FechamentoView user={liveUser} fechamentos={fechamentos} setFechamentos={setFechamentos} motoristas={motoristas} setMotoristas={setMotoristas} dreEntradas={dreEntradas} setDreEntradas={setDreEntradas} fixedCosts={fixedCosts} costEntries={costEntries} faturamentosJadlog={faturamentosJadlog} acrescimos={acrescimos} tickets={tickets} setTickets={setTickets}/>}
         {view==="mob"&&<MobView user={liveUser} mobBases={mobBases} setMobBases={setMobBases} mobAprovado={mobAprovado} setMobAprovado={setMobAprovado} mobCustos={mobCustos} setMobCustos={setMobCustos}/>}
         {view==="fatjadlog"&&hasF&&<FatJadlogView user={liveUser} faturamentos={faturamentosJadlog} setFaturamentos={setFaturamentosJadlog} unidades={unidades} setUnidades={setUnidades} clients={clients}/>}
