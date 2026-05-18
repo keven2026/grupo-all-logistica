@@ -3814,6 +3814,150 @@ function ResumoFinMots({ mots, total }) {
 // ─────────────────────────────────────────────
 // PLANILHAS & RECEITA DO FECHAMENTO
 // ─────────────────────────────────────────────
+
+// ─── Análise de um fechamento específico ───────────────────────
+function AnaliseFechamentoDetalhe({ fec }) {
+  const [ordenar, setOrdenar] = useState("margem");
+
+  const mots = (fec.mots||[]).map(m => {
+    const faturado = m.totalFaturado || 0;
+    const pago     = m.totalBruto || 0;
+    const pacotes  = m.totalCTEs || 0;
+    const debitos  = (m.correcoes||[]).filter(c=>c.valor<0).reduce((s,c)=>s+Math.abs(c.valor),0);
+    const margem   = faturado > 0 ? ((faturado - pago) / faturado) * 100 : 0;
+    return { ...m, faturado, pago, pacotes, debitos, margem, lucro: faturado - pago };
+  });
+
+  const sorted = [...mots].sort((a,b) => {
+    if (ordenar==="margem")   return b.margem - a.margem;
+    if (ordenar==="lucro")    return b.lucro - a.lucro;
+    if (ordenar==="pacotes")  return b.pacotes - a.pacotes;
+    if (ordenar==="faturado") return b.faturado - a.faturado;
+    if (ordenar==="pago")     return b.pago - a.pago;
+    return 0;
+  });
+
+  const totFaturado = mots.reduce((s,m)=>s+m.faturado,0);
+  const totPago     = mots.reduce((s,m)=>s+m.pago,0);
+  const totPacotes  = mots.reduce((s,m)=>s+m.pacotes,0);
+  const totLucro    = totFaturado - totPago;
+  const totMargem   = totFaturado > 0 ? (totLucro/totFaturado)*100 : 0;
+
+  const corMargem = m => m >= 30?"#10b981":m >= 15?"#f59e0b":"#ef4444";
+  const bgMargem  = m => m >= 30?"bg-emerald-500/10 border-emerald-500/30":m >= 15?"bg-amber-500/10 border-amber-500/30":"bg-red-500/10 border-red-500/30";
+
+  const semFaturamento = totFaturado === 0;
+
+  return (
+    <div className="space-y-5">
+
+      {semFaturamento && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+          <p className="text-sm font-bold text-amber-400 mb-1">⚠ Receita não encontrada</p>
+          <p className="text-xs text-amber-300/70">Os valores de faturamento Jadlog estão zerados neste fechamento. Para calcular margem, certifique-se que a planilha foi importada com a coluna de valor faturado por CTE preenchida.</p>
+        </div>
+      )}
+
+      {/* KPIs do fechamento */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">📦 Total Pacotes</p>
+          <p className="text-2xl font-black text-slate-100">{totPacotes.toLocaleString("pt-BR")}</p>
+          <p className="text-xs text-slate-500 mt-1">{mots.length} agregado(s)</p>
+        </div>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">💵 Receita Gerada</p>
+          <p className={"text-2xl font-black "+(totFaturado>0?"text-emerald-400":"text-slate-500")}>{totFaturado>0?fmt(totFaturado):"—"}</p>
+          <p className="text-xs text-slate-500 mt-1">{totPacotes>0&&totFaturado>0?fmt(totFaturado/totPacotes)+" /cte":"sem dados"}</p>
+        </div>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">🧾 Total Pago</p>
+          <p className="text-2xl font-black text-red-400">{fmt(totPago)}</p>
+          <p className="text-xs text-slate-500 mt-1">{totPacotes>0?fmt(totPago/totPacotes)+" /cte":"—"}</p>
+        </div>
+        <div className={"rounded-xl p-4 border-2 "+(semFaturamento?"bg-slate-800 border-slate-700":bgMargem(totMargem))}>
+          <p className="text-xs text-slate-400 mb-1">📈 Margem Total</p>
+          <p className="text-2xl font-black" style={{color:semFaturamento?"#64748b":corMargem(totMargem)}}>
+            {semFaturamento?"—":totMargem.toFixed(1)+"%"}
+          </p>
+          <p className="text-xs text-slate-500 mt-1">{semFaturamento?"receita não importada":fmt(totLucro)+" de lucro"}</p>
+        </div>
+      </div>
+
+      {/* Ordenação */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="text-xs text-slate-400 font-semibold">Ordenar por:</p>
+        {[["margem","📈 Margem"],["lucro","💰 Lucro"],["pacotes","📦 Pacotes"],["faturado","💵 Receita"],["pago","🧾 Pago"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setOrdenar(v)}
+            className={"text-xs px-3 py-1.5 rounded-full border font-semibold transition-all "+(ordenar===v?"bg-red-600 border-red-600 text-white":"bg-slate-800 border-slate-700 text-slate-400 hover:border-red-500")}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Por agregado */}
+      <div className="space-y-3">
+        {sorted.map((m, idx) => (
+          <div key={m.id||idx} className={"rounded-xl border p-4 space-y-3 "+(semFaturamento?"bg-slate-800 border-slate-700":bgMargem(m.margem))}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                  style={{background:semFaturamento?"#475569":corMargem(m.margem)}}>
+                  {idx+1}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-100">{m.nome}</p>
+                  <p className="text-xs text-slate-500">Mat. {m.mat||"—"} · {m.etapa}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-400">Margem</p>
+                <p className="text-xl font-black" style={{color:semFaturamento?"#64748b":corMargem(m.margem)}}>
+                  {m.faturado>0?m.margem.toFixed(1)+"%":"—"}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">📦 Pacotes</p>
+                <p className="text-lg font-bold text-slate-100">{m.pacotes.toLocaleString("pt-BR")}</p>
+              </div>
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">💵 Receita</p>
+                <p className={"text-sm font-bold "+(m.faturado>0?"text-emerald-400":"text-slate-500")}>{m.faturado>0?fmt(m.faturado):"—"}</p>
+                {m.pacotes>0&&m.faturado>0&&<p className="text-xs text-slate-600">{fmt(m.faturado/m.pacotes)}/cte</p>}
+              </div>
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">🧾 Pago</p>
+                <p className="text-sm font-bold text-red-400">{fmt(m.pago)}</p>
+                {m.pacotes>0&&<p className="text-xs text-slate-600">{fmt(m.pago/m.pacotes)}/cte</p>}
+              </div>
+              <div className="bg-slate-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-500 mb-1">💰 Lucro</p>
+                <p className={"text-sm font-bold "+(m.lucro>=0?"text-emerald-400":"text-red-400")}>{m.faturado>0?fmt(m.lucro):"—"}</p>
+                {m.debitos>0&&<p className="text-xs text-orange-400">{fmt(m.debitos)} débitos</p>}
+              </div>
+            </div>
+
+            {m.faturado > 0 && (
+              <div>
+                <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{width:Math.max(0,Math.min(100,m.margem))+"%",background:corMargem(m.margem)}}/>
+                </div>
+                <div className="flex justify-between text-xs text-slate-600 mt-1">
+                  <span>Custo {(100-m.margem).toFixed(1)}%</span>
+                  <span>Margem {m.margem.toFixed(1)}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ReceitaFechamento({ fec, upd }) {
   const fileRef = useRef();
   const [importing, setImporting] = useState(false);
@@ -4124,7 +4268,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
 
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
-        {[["resumo","📊 Resumo"],["mots","🚚 Por Motorista"],["ctes","📋 CTEs de Entrega"],
+        {[["resumo","📊 Resumo"],["mots","🚚 Por Motorista"],["analise","📈 Análise"],["ctes","📋 CTEs de Entrega"],
           ["receita","📎 Planilhas & Receita"],
           ...(userHasDRE(user) ? [["financeiro","💰 Saldo Financeiro"]] : []),
           ["links","🔗 Links Agregados"],["hist","📜 Histórico"]].map(([v, l]) => (
@@ -4480,6 +4624,7 @@ function FechamentoDetalhe({ fec, user, motoristas, setFechamentos, tickets, set
 
       {/* LINKS AGREGADOS */}
       {tab === "links" && <PainelLinks fec={fec} motoristas={motoristas} />}
+      {tab === "analise" && <AnaliseFechamentoDetalhe fec={fec}/>}
       {tab === "receita" && <ReceitaFechamento fec={fec} upd={upd} />}
 
       {/* HISTÓRICO */}
