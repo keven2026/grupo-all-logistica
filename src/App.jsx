@@ -270,12 +270,15 @@ function notifyUsers(users, subject, body) {
 // ── Categorias de custo da operação ───────────────────────
 
 const __STORE__ = {};
-const __LOADED__ = {}; // tracks which keys have been loaded from Supabase
+const __LOADED__ = {};
+const __LAST_WRITE__ = {}; // timestamp of last local write per key
+
+// Keys that sync across machines (poll every 90s if no recent local write)
+const SYNC_KEYS = ["ops3_tickets","ops3_ticketsExcluidos","ops3_fechamentos","ops3_motoristas","ops3_tasks","ops3_templates","ops3_users"];
 
 function useLS(key, init) {
   const k = "ops3_"+(key)+"";
 
-  // Initialize store entry once from localStorage
   if (__STORE__[k] === undefined) {
     let fromLS = null;
     try { const s = localStorage.getItem(k); fromLS = s ? JSON.parse(s) : null; } catch {}
@@ -286,11 +289,11 @@ function useLS(key, init) {
 
   const set = v => {
     const nv = typeof v === "function" ? v(__STORE__[k]) : v;
-    __STORE__[k] = nv;           // 1. update global store immediately
-    setVal(nv);                  // 2. trigger re-render
-    __LOADED__[k] = true;        // 3. mark as "user has written" — block Supabase overwrite
+    __STORE__[k] = nv;
+    setVal(nv);
+    __LOADED__[k] = true;
+    __LAST_WRITE__[k] = Date.now();
     try { localStorage.setItem(k, JSON.stringify(nv)); } catch {}
-    // 4. save to Supabase (fire and forget)
     const sb = getSupabase();
     if (sb) {
       sb.from("app_data")
@@ -299,14 +302,15 @@ function useLS(key, init) {
     }
   };
 
-  // Load from Supabase ONCE on first mount — only if user hasn't written yet
-  useEffect(() => {
-    if (__LOADED__[k]) return; // already loaded or user wrote — skip
+  const fetchFromSupabase = (force=false) => {
+    // Don't overwrite if user wrote in the last 3 minutes (unless forced)
+    const lastWrite = __LAST_WRITE__[k] || 0;
+    if (!force && Date.now() - lastWrite < 3 * 60 * 1000) return;
     const sb = getSupabase();
-    if (!sb) { __LOADED__[k] = true; return; }
+    if (!sb) return;
     sb.from("app_data").select("value").eq("key", k).single()
       .then(({ data }) => {
-        if (__LOADED__[k]) return; // user wrote while we were fetching — discard
+        if (!force && Date.now() - (__LAST_WRITE__[k]||0) < 3*60*1000) return;
         if (data?.value !== undefined && data.value !== null) {
           __STORE__[k] = data.value;
           setVal(data.value);
@@ -315,7 +319,20 @@ function useLS(key, init) {
         __LOADED__[k] = true;
       })
       .catch(() => { __LOADED__[k] = true; });
-    // NO polling — never overwrite local state after initial load
+  };
+
+  // Initial load from Supabase
+  useEffect(() => {
+    if (__LOADED__[k]) return;
+    fetchFromSupabase(true);
+  // eslint-disable-next-line
+  }, []);
+
+  // Periodic sync for shared keys — every 90 seconds
+  useEffect(() => {
+    if (!SYNC_KEYS.includes(k)) return;
+    const iv = setInterval(() => fetchFromSupabase(false), 90000);
+    return () => clearInterval(iv);
   // eslint-disable-next-line
   }, []);
 
@@ -4759,8 +4776,22 @@ function AtendimentoView({ user, tickets, setTickets, motoristas, users, fechame
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h1 className="text-xl font-bold text-slate-100">Atendimento — Acareação</h1>
           <p className="text-sm text-slate-400">{tickets.length} ticket(s) · {tickets.filter(t=>t.status==="aguardando").length} aguardando resposta</p></div>
-        {canEdit&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Novo Ticket</Btn>}
-        <Btn variant="secondary" onClick={()=>exportarPDF(tickets,filtStatus,motoristas)}><FileText size={14}/>Exportar PDF</Btn>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={()=>{
+            const sb=window._supabaseClient;
+            if(!sb){return;}
+            sb.from("app_data").select("value").eq("key","ops3_tickets").single()
+              .then(({data})=>{if(data?.value){setTickets(data.value);}})
+              .catch(()=>{});
+            sb.from("app_data").select("value").eq("key","ops3_ticketsExcluidos").single()
+              .then(({data})=>{if(data?.value){setTicketsExcluidos(data.value);}})
+              .catch(()=>{});
+          }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-emerald-700 text-slate-300 hover:text-white text-xs font-semibold transition-all border border-slate-600" title="Buscar tickets mais recentes do servidor">
+            <RefreshCw size={12}/>Sincronizar
+          </button>
+          {canEdit&&<Btn onClick={()=>setShowNew(true)}><Plus size={14}/>Novo Ticket</Btn>}
+          <Btn variant="secondary" onClick={()=>exportarPDF(tickets,filtStatus,motoristas)}><FileText size={14}/>Exportar PDF</Btn>
+        </div>
       </div>
 
       {/* Filter */}
