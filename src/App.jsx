@@ -19,7 +19,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const now = () => { const d = new Date(); const off = d.getTimezoneOffset()*60000; return new Date(d-off).toISOString().slice(0,-1); };
 
 // Compress image to max 1024px and 65% JPEG quality before storing
-const compressImage = (file, maxPx=1024, quality=0.65) => new Promise(resolve => {
+const compressImage = (file, maxPx=800, quality=0.55) => new Promise(resolve => {
   const fallback = () => { const r2=new FileReader(); r2.onload=e=>resolve(e.target.result); r2.onerror=()=>resolve(null); r2.readAsDataURL(file); };
   if (!file || !file.type) { fallback(); return; }
   if (!file.type.startsWith("image/")) { fallback(); return; }
@@ -276,6 +276,33 @@ const __LAST_WRITE__ = {}; // timestamp of last local write per key
 // Keys that sync across machines (poll every 90s if no recent local write)
 const SYNC_KEYS = ["ops3_tickets","ops3_ticketsExcluidos","ops3_fechamentos","ops3_motoristas","ops3_tasks","ops3_templates","ops3_users"];
 
+
+// Strip large base64 fields before saving to Supabase
+const stripBase64 = (data, key) => {
+  if (key !== "ops3_tickets" && key !== "ops3_ticketsExcluidos") return data;
+  if (!Array.isArray(data)) return data;
+  return data.map(t => {
+    const clean = {...t};
+    if (clean.respostaData) clean.respostaData = "__LOCAL__";
+    if (clean.pdfData)      clean.pdfData      = "__LOCAL__";
+    return clean;
+  });
+};
+
+// Merge Supabase data with local data — preserve base64 fields from local
+const mergeWithLocal = (remoteData, localData, key) => {
+  if (key !== "ops3_tickets" && key !== "ops3_ticketsExcluidos") return remoteData;
+  if (!Array.isArray(remoteData) || !Array.isArray(localData)) return remoteData;
+  return remoteData.map(rt => {
+    const lt = localData.find(x => x.id === rt.id);
+    return {
+      ...rt,
+      respostaData: (lt?.respostaData && lt.respostaData !== "__LOCAL__") ? lt.respostaData : (rt.respostaData !== "__LOCAL__" ? rt.respostaData : undefined),
+      pdfData:      (lt?.pdfData      && lt.pdfData      !== "__LOCAL__") ? lt.pdfData      : (rt.pdfData      !== "__LOCAL__" ? rt.pdfData      : undefined),
+    };
+  });
+};
+
 function useLS(key, init) {
   const k = "ops3_"+(key)+"";
 
@@ -296,8 +323,9 @@ function useLS(key, init) {
     try { localStorage.setItem(k, JSON.stringify(nv)); } catch {}
     const sb = getSupabase();
     if (sb) {
+      const nvForSupabase = stripBase64(nv, k);
       sb.from("app_data")
-        .upsert({ key: k, value: nv }, { onConflict: "key" })
+        .upsert({ key: k, value: nvForSupabase }, { onConflict: "key" })
         .then(({ error }) => { if (error) console.warn("[useLS] save error:", error.message); });
     }
   };
@@ -312,9 +340,11 @@ function useLS(key, init) {
       .then(({ data }) => {
         if (!force && Date.now() - (__LAST_WRITE__[k]||0) < 3*60*1000) return;
         if (data?.value !== undefined && data.value !== null) {
-          __STORE__[k] = data.value;
-          setVal(data.value);
-          try { localStorage.setItem(k, JSON.stringify(data.value)); } catch {}
+          // Merge remote with local to preserve base64 images
+          const merged = mergeWithLocal(data.value, __STORE__[k], k);
+          __STORE__[k] = merged;
+          setVal(merged);
+          try { localStorage.setItem(k, JSON.stringify(merged)); } catch {}
         }
         __LOADED__[k] = true;
       })
