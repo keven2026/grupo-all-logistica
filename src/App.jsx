@@ -5304,28 +5304,58 @@ function TicketImageViewer({ ticket }) {
 
   const isImg = d => d && d.startsWith("data:image");
 
+  const baixar = () => {
+    const data = imgData;
+    if (!data) { alert("Imagem não carregada ainda. Aguarde."); return; }
+    const a = document.createElement("a");
+    a.href = data;
+    a.download = ticket.respostaNome || "evidencia";
+    a.click();
+  };
+
+  const tentar = () => {
+    setLoading(true);
+    loadTicketImage(ticket.id, (d) => { setImgData(d); setLoading(false); });
+    setTimeout(() => setLoading(false), 8000);
+  };
+
   return (
     <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/30 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-xs font-bold text-emerald-400">✅ Evidência enviada em {(ticket.respondidoEm||"").slice(0,10)}</p>
-        <p className="text-xs text-slate-400 font-mono">{ticket.respostaNome}</p>
+        <div>
+          <p className="text-xs font-bold text-emerald-400">✅ Evidência enviada em {(ticket.respondidoEm||"").slice(0,10)}</p>
+          <p className="text-xs text-slate-400 font-mono mt-0.5">{ticket.respostaNome}</p>
+        </div>
+        <div className="flex gap-2">
+          {imgData && (
+            <button onClick={baixar}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all">
+              ⬇ Baixar
+            </button>
+          )}
+          {!imgData && !loading && (
+            <button onClick={tentar}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold transition-all">
+              🔄 Carregar imagem
+            </button>
+          )}
+        </div>
       </div>
-      {loading && <p className="text-xs text-slate-500 animate-pulse">🔄 Carregando imagem...</p>}
+      {loading && <p className="text-xs text-slate-500 animate-pulse">🔄 Buscando imagem no servidor...</p>}
       {!loading && imgData && isImg(imgData) && (
         <img src={imgData} alt="evidencia" className="max-w-full rounded-lg border border-slate-700" style={{maxHeight:"400px"}}/>
       )}
       {!loading && imgData && !isImg(imgData) && (
         <a href={imgData} download={ticket.respostaNome} target="_blank" rel="noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm hover:bg-blue-500/30">
-          📄 Baixar arquivo
+          📄 Baixar PDF
         </a>
       )}
       {!loading && !imgData && ticket.respostaNome && (
-        <div className="flex items-center gap-2">
-          <p className="text-xs text-slate-500">Imagem disponível apenas no dispositivo de envio.</p>
-          <button onClick={()=>{setLoading(true);loadTicketImage(ticket.id,(d)=>{setImgData(d);setLoading(false);});}}
-            className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">
-            🔄 Tentar carregar
+        <div className="bg-slate-800 rounded-lg p-3 border border-slate-700 text-center">
+          <p className="text-xs text-slate-400 mb-2">Imagem não carregada.</p>
+          <button onClick={tentar} className="text-xs px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white font-semibold">
+            🔄 Tentar buscar no servidor
           </button>
         </div>
       )}
@@ -6346,6 +6376,7 @@ function PortalTicketsMenu({ tickets, setTickets, mCad, motMatricula }) {
   const handleEvidencia = (ticketId, file) => {
     compressImage(file).then(dataUrl => {
       if (!dataUrl) { alert("Erro ao processar. Tente novamente."); return; }
+      saveTicketImage(ticketId, dataUrl, file.name);
       setTickets(p => p.map(x => {
         if (x.id!==ticketId) return x;
         if (x.status==="respondido"&&x.respostaData) return x;
